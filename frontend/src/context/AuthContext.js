@@ -324,6 +324,37 @@ export function AuthProvider({ children }) {
     setActiveBusinessId(bizId);
   };
 
+  const switchToOwnerMode = (newBizData = null) => {
+    const updated = {
+      ...user,
+      role: 'owner',
+      plan: user?.plan === 'free' ? 'plus' : user?.plan || 'plus',
+      ownedBusinessIds: user?.ownedBusinessIds && user.ownedBusinessIds.length > 0
+        ? user.ownedBusinessIds
+        : ['biz-1', 'biz-3']
+    };
+    if (newBizData && newBizData.businessName) {
+      updated.businessName = newBizData.businessName;
+    }
+    setUser(updated);
+    setRole('owner');
+    try {
+      localStorage.setItem('cf_user', JSON.stringify(updated));
+    } catch (e) {}
+  };
+
+  const switchToUserMode = () => {
+    const updated = {
+      ...user,
+      role: 'user'
+    };
+    setUser(updated);
+    setRole('user');
+    try {
+      localStorage.setItem('cf_user', JSON.stringify(updated));
+    } catch (e) {}
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -345,6 +376,8 @@ export function AuthProvider({ children }) {
         completeOnboarding,
         logout,
         switchActiveBusiness,
+        switchToOwnerMode,
+        switchToUserMode,
         setUser
       }}
     >

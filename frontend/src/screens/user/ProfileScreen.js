@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput } from 'react-native';
 import {
   User,
   ShieldCheck,
@@ -11,7 +11,10 @@ import {
   FileText,
   HelpCircle,
   Briefcase,
-  LifeBuoy
+  LifeBuoy,
+  X,
+  CheckCircle2,
+  ArrowRight
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
@@ -20,9 +23,30 @@ import { Button } from '../../components/Button';
 import { SupportModal } from '../../components/SupportModal';
 import { useAuth } from '../../context/AuthContext';
 
-export function ProfileScreen({ onSwitchToOwner }) {
-  const { user, role, logout } = useAuth();
+export function ProfileScreen({ onSwitchToOwner, onSwitchToUser }) {
+  const { user, role, logout, switchToOwnerMode, switchToUserMode } = useAuth();
   const [showSupportModal, setShowSupportModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [newBizName, setNewBizName] = useState('');
+  const [newBizCategory, setNewBizCategory] = useState('Manufacturing');
+  const [newBizCity, setNewBizCity] = useState(user?.city || 'Coimbatore');
+
+  const handleSwitchToOwner = () => {
+    if (onSwitchToOwner) {
+      onSwitchToOwner();
+    } else {
+      switchToOwnerMode({ businessName: newBizName });
+    }
+    setShowUpgradeModal(false);
+  };
+
+  const handleSwitchToUser = () => {
+    if (onSwitchToUser) {
+      onSwitchToUser();
+    } else {
+      switchToUserMode();
+    }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -66,7 +90,7 @@ export function ProfileScreen({ onSwitchToOwner }) {
       </Card>
 
       {/* Become Business Owner CTA if user is not already an owner */}
-      {role === 'user' && (
+      {role === 'user' ? (
         <Card style={styles.ownerCtaCard}>
           <View style={styles.ownerCtaHeader}>
             <Briefcase size={20} color={colors.primary} />
@@ -77,8 +101,25 @@ export function ProfileScreen({ onSwitchToOwner }) {
           </Text>
           <Button
             title="Switch to Business Owner Mode"
-            onPress={onSwitchToOwner}
+            onPress={() => setShowUpgradeModal(true)}
             variant="primary"
+            size="md"
+            style={{ marginTop: spacing.md }}
+          />
+        </Card>
+      ) : (
+        <Card style={[styles.ownerCtaCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+          <View style={styles.ownerCtaHeader}>
+            <CheckCircle2 size={20} color="#059669" />
+            <Text style={[styles.ownerCtaTitle, { color: '#065F46' }]}>Business Owner Mode Active</Text>
+          </View>
+          <Text style={styles.ownerCtaDesc}>
+            You are managing business listings, enquiries, and Counter QR codes. You can toggle back to normal customer discovery mode anytime.
+          </Text>
+          <Button
+            title="Switch to Customer / User Mode"
+            onPress={handleSwitchToUser}
+            variant="outline"
             size="md"
             style={{ marginTop: spacing.md }}
           />
@@ -110,6 +151,72 @@ export function ProfileScreen({ onSwitchToOwner }) {
         visible={showSupportModal}
         onClose={() => setShowSupportModal(false)}
       />
+
+      {/* Switch to Business Owner Mode Modal */}
+      {showUpgradeModal && (
+        <Modal transparent animationType="slide" visible={showUpgradeModal} onRequestClose={() => setShowUpgradeModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Briefcase size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                  <Text style={styles.modalTitle}>Switch to Business Owner</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowUpgradeModal(false)}>
+                  <X size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalDesc}>
+                Upgrade your account to manage business listings, view counter QR codes, and receive customer enquiries.
+              </Text>
+
+              <Text style={styles.fieldLabel}>Business / Enterprise Name (Optional)</Text>
+              <TextInput
+                value={newBizName}
+                onChangeText={setNewBizName}
+                placeholder="e.g., Sri Murugan Tech Solutions"
+                placeholderTextColor={colors.textMuted}
+                style={styles.modalInput}
+              />
+
+              <Text style={styles.fieldLabel}>Industry Category</Text>
+              <TextInput
+                value={newBizCategory}
+                onChangeText={setNewBizCategory}
+                placeholder="Manufacturing, IT, Logistics, Retail..."
+                placeholderTextColor={colors.textMuted}
+                style={styles.modalInput}
+              />
+
+              <Text style={styles.fieldLabel}>Operating City</Text>
+              <TextInput
+                value={newBizCity}
+                onChangeText={setNewBizCity}
+                placeholder="Coimbatore"
+                placeholderTextColor={colors.textMuted}
+                style={styles.modalInput}
+              />
+
+              <View style={styles.modalActions}>
+                <Button
+                  title="Cancel"
+                  variant="outline"
+                  onPress={() => setShowUpgradeModal(false)}
+                  style={{ flex: 1, marginRight: spacing.sm }}
+                />
+                <Button
+                  title="Activate Owner Mode"
+                  variant="primary"
+                  icon={ArrowRight}
+                  onPress={handleSwitchToOwner}
+                  style={{ flex: 1.5 }}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </ScrollView>
   );
 }
@@ -241,5 +348,65 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textPrimary,
     flex: 1
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 460,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)'
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingBottom: spacing.sm
+  },
+  modalTitle: {
+    ...typography.titleMedium,
+    color: colors.textPrimary
+  },
+  modalDesc: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+    lineHeight: 18
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 4,
+    marginTop: spacing.xs
+  },
+  modalInput: {
+    backgroundColor: colors.bgMuted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    outlineStyle: 'none'
+  },
+  modalActions: {
+    flexDirection: 'row',
+    marginTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md
   }
 });

@@ -204,7 +204,14 @@ export function AppNavigator() {
         case 'owner_share':
           return <ShareCardScreen />;
         case 'owner_profile':
-          return <ProfileScreen />;
+          return (
+            <ProfileScreen
+              onSwitchToUser={() => {
+                setUser((prev) => ({ ...prev, role: 'user' }));
+                setCurrentTab('user_home');
+              }}
+            />
+          );
         case 'owner_dashboard':
         default:
           return (
@@ -241,8 +248,13 @@ export function AppNavigator() {
         return (
           <ProfileScreen
             onSwitchToOwner={() => {
-              // Upgrade role to owner in dev
-              setUser((prev) => ({ ...prev, role: 'owner', ownedBusinessIds: ['biz-1', 'biz-2'] }));
+              setUser((prev) => ({
+                ...prev,
+                role: 'owner',
+                plan: prev?.plan === 'free' ? 'plus' : prev?.plan || 'plus',
+                ownedBusinessIds: prev?.ownedBusinessIds?.length ? prev.ownedBusinessIds : ['biz-1', 'biz-3']
+              }));
+              setCurrentTab('owner_dashboard');
             }}
           />
         );
