@@ -117,23 +117,47 @@ export function ScanCardScreen({ onCardSaved }) {
     startCamera(nextFacing);
   };
 
-  // Capture frame from live camera video stream
+  // Capture frame from live camera video stream (Exact Viewfinder Crop)
   const captureFromCamera = () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+
+    // Source stream dimensions
+    const vWidth = video.videoWidth || 1280;
+    const vHeight = video.videoHeight || 720;
+
+    // Viewfinder container on-screen dimensions
+    const elemRect = video.getBoundingClientRect ? video.getBoundingClientRect() : { width: 360, height: 200 };
+    const elWidth = elemRect.width || 360;
+    const elHeight = elemRect.height || 200;
+
+    // Compute exact cropped region visible inside the viewfinder with object-fit: cover
+    const scale = Math.max(elWidth / vWidth, elHeight / vHeight);
+    const visibleWidthInVideo = Math.min(vWidth, elWidth / scale);
+    const visibleHeightInVideo = Math.min(vHeight, elHeight / scale);
+
+    const cropX = Math.max(0, (vWidth - visibleWidthInVideo) / 2);
+    const cropY = Math.max(0, (vHeight - visibleHeightInVideo) / 2);
+
+    // Set canvas to cropped card rectangle
+    canvas.width = visibleWidthInVideo;
+    canvas.height = visibleHeightInVideo;
 
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Draw ONLY the exact cropped card area matching the user's camera preview
+    ctx.drawImage(
+      video,
+      cropX, cropY, visibleWidthInVideo, visibleHeightInVideo,
+      0, 0, visibleWidthInVideo, visibleHeightInVideo
+    );
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
     stopCameraStream();
     setSelectedImage(dataUrl);
 
-    // Trigger Dynamic AI OCR extraction on captured image
+    // Trigger Dynamic AI OCR extraction on captured cropped image
     processScan(dataUrl);
   };
 

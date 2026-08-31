@@ -1,9 +1,9 @@
 import Tesseract from 'tesseract.js';
 
 /**
- * Intelligent Business Card Text Parser
+ * Intelligent Business Card Text Parser & Cleaner
  * Extracts structured fields (Company, Name, Designation, Phones, Emails, Website, Address, Tags)
- * from raw OCR text recognized from any physical or digital business card.
+ * with robust noise filtration for real physical and on-screen business cards.
  */
 export async function extractCardWithTesseract(imageSource) {
   try {
@@ -15,13 +15,39 @@ export async function extractCardWithTesseract(imageSource) {
       }
     });
 
-    console.log('[Raw OCR Text Extracted]:', text);
+    console.log('[Raw OCR Text Extracted]:\n', text);
     return parseBusinessCardText(text);
   } catch (error) {
     console.warn('[Tesseract OCR Error]:', error);
     return parseBusinessCardText('');
   }
 }
+
+// Words to ignore from screen UI, browser bars, and noisy artifacts
+const UI_IGNORE_WORDS = [
+  'file', 'edit', 'view', 'history', 'bookmarks', 'profiles', 'tab', 'window', 'help',
+  'youtube', 'chatgpt', 'copilot', 'vercel', 'vercel.app', 'kernel', 'ajida',
+  'scan business card', 'open live camera', 'choose from gallery', 'scan another card',
+  'user', 'change card photo', 'http://', 'https://'
+];
+
+// Common job titles and designations
+const DESIGNATION_KEYWORDS = [
+  'real estate agent', 'support specialist', 'computer support', 'managing partner',
+  'director', 'managing director', 'manager', 'partner', 'founder', 'co-founder',
+  'ceo', 'cto', 'cfo', 'coo', 'president', 'vice president', 'vp', 'consultant',
+  'engineer', 'software engineer', 'architect', 'executive', 'officer',
+  'specialist', 'advocate', 'doctor', 'proprietor', 'head', 'lead',
+  'representative', 'realtor', 'broker', 'accountant', 'designer', 'developer'
+];
+
+// Address indicator words
+const ADDRESS_KEYWORDS = [
+  'street', 'st.', 'st,', 'st ', 'road', 'rd.', 'rd,', 'nagar', 'avenue', 'ave',
+  'city', 'state', 'pincode', 'pin', 'zip', 'anywhere', 'floor', 'building',
+  'block', 'lane', 'sector', 'dist', 'district', 'estate', 'sidco', 'mount holly',
+  'rockville', 'ambigai', 'chinnavedapatti', 'coimbatore', 'tamil nadu'
+];
 
 export function parseBusinessCardText(rawText) {
   if (!rawText || typeof rawText !== 'string') {
@@ -37,72 +63,71 @@ export function parseBusinessCardText(rawText) {
     };
   }
 
-  const lines = rawText
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 1 && !l.includes('Youtube') && !l.includes('ChatGPT') && !l.includes('Copilot'));
+  // Split lines and filter out empty / UI artifact noise
+  const rawLines = rawText.split(/\r?\n/);
+  const cleanLines = [];
+
+  for (let l of rawLines) {
+    let line = l.trim();
+    // Remove leading punctuation / noise (e.g., "| Computer...", ". FE", "~ ")
+    line = line.replace(/^[^a-zA-Z0-9+(]+/, '').trim();
+    if (line.length < 2) continue;
+
+    const lower = line.toLowerCase();
+    const isUiNoise = UI_IGNORE_WORDS.some((w) => lower.includes(w) && (lower.includes('file edit') || lower.includes('bookmarks') || lower.includes('vercel.app')));
+    if (!isUiNoise) {
+      cleanLines.push(line);
+    }
+  }
 
   let emails = [];
   let websites = [];
   let phones = [];
   let addresses = [];
+  let designation = '';
   let candidateNames = [];
-  let candidateDesignations = [];
   let candidateCompanies = [];
 
-  // Regex patterns
   const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi;
   const websiteRegex = /(https?:\/\/)?(www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(\.[a-zA-Z]{2,})?(\/[^\s]*)?)/gi;
   const phoneRegex = /(?:(?:\+|00)?\d{1,3}[-.\s]?)?(?:\(?\d{2,5}\)?[-.\s]?)?\d{3,5}[-.\s]?\d{3,5}/g;
 
-  // Common designation keywords
-  const designationKeywords = [
-    'agent', 'real estate', 'director', 'manager', 'partner', 'managing partner',
-    'founder', 'co-founder', 'ceo', 'cto', 'cfo', 'president', 'consultant',
-    'engineer', 'executive', 'officer', 'specialist', 'advocate', 'doctor',
-    'proprietor', 'head', 'lead', 'representative', 'realtor', 'broker'
-  ];
+  for (let i = 0; i < cleanLines.length; i++) {
+    const line = cleanLines[i];
+    const lower = line.toLowerCase();
 
-  // Address keywords
-  const addressKeywords = [
-    'street', 'st.', 'st,', 'st ', 'road', 'rd.', 'rd,', 'nagar', 'avenue', 'ave',
-    'city', 'state', 'pincode', 'pin', 'zip', 'anywhere', 'floor', 'building',
-    'block', 'lane', 'sector', 'dist', 'district', 'estate', 'sidco', 'tamil nadu'
-  ];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // 1. Email Extraction
+    // 1. Emails
     const emailMatches = line.match(emailRegex);
     if (emailMatches) {
       emailMatches.forEach((em) => {
-        if (!emails.includes(em.toLowerCase())) emails.push(em.toLowerCase());
+        const cleanEm = em.toLowerCase().replace(/[,;:]+$/, '');
+        if (!emails.includes(cleanEm)) emails.push(cleanEm);
       });
       continue;
     }
 
-    // 2. Website Extraction
-    if (line.toLowerCase().includes('www.') || line.toLowerCase().includes('.com') || line.toLowerCase().includes('.in') || line.toLowerCase().includes('.org') || line.toLowerCase().includes('.net')) {
+    // 2. Websites
+    if (lower.includes('www.') || lower.includes('.com') || lower.includes('.in') || lower.includes('.org') || lower.includes('.net') || lower.includes('.co')) {
       const webMatches = line.match(websiteRegex);
       if (webMatches) {
         webMatches.forEach((web) => {
-          if (!web.includes('@') && !websites.includes(web)) {
-            const formattedWeb = web.startsWith('http') ? web : `https://${web.replace(/^https?:\/\//, '')}`;
-            websites.push(formattedWeb);
+          if (!web.includes('@')) {
+            const cleanWeb = web.replace(/[,;:]+$/, '');
+            const formatted = cleanWeb.startsWith('http') ? cleanWeb : `https://${cleanWeb}`;
+            if (!websites.includes(formatted)) websites.push(formatted);
           }
         });
         continue;
       }
     }
 
-    // 3. Phone Extraction
+    // 3. Phone Numbers
     const phoneMatches = line.match(phoneRegex);
     if (phoneMatches) {
       phoneMatches.forEach((p) => {
         const digits = p.replace(/\D/g, '');
         if (digits.length >= 7 && digits.length <= 15) {
-          const cleaned = p.trim();
+          const cleaned = p.trim().replace(/^[^0-9+(]+/, '');
           if (!phones.some((existing) => existing.raw === cleaned)) {
             phones.push({
               raw: cleaned,
@@ -114,73 +139,92 @@ export function parseBusinessCardText(rawText) {
           }
         }
       });
-      // If the line only contained phone number, move on
-      if (line.replace(/[\d\s+\-().]/g, '').length < 3) {
+      // If line only had numbers / symbols, skip to next line
+      if (line.replace(/[\d\s+\-().|/]/g, '').length < 3) {
         continue;
       }
     }
 
-    // 4. Address Detection
-    const lineLower = line.toLowerCase();
-    const hasAddressWord = addressKeywords.some((kw) => lineLower.includes(kw));
-    const hasZipDigits = /\b\d{5,6}\b/.test(line);
-    if (hasAddressWord || hasZipDigits) {
-      addresses.push(line);
+    // 4. Designation / Role (Check for common job titles)
+    const isDesigMatch = DESIGNATION_KEYWORDS.some((kw) => lower.includes(kw));
+    if (isDesigMatch && !designation) {
+      designation = line.replace(/^[|•\-:]\s*/, '').trim();
       continue;
     }
 
-    // 5. Designation Detection
-    const hasDesignationWord = designationKeywords.some((kw) => lineLower.includes(kw));
-    if (hasDesignationWord && line.length < 50) {
-      candidateDesignations.push(line);
+    // 5. Addresses
+    const hasAddrWord = ADDRESS_KEYWORDS.some((kw) => lower.includes(kw));
+    const hasZip = /\b\d{5,6}\b/.test(line);
+    if (hasAddrWord || hasZip) {
+      const cleanAddr = line.replace(/^[£$#|•\-:]\s*/, '').trim();
+      addresses.push(cleanAddr);
       continue;
     }
 
-    // 6. Names and Company Candidates
-    // Usually names have 2 to 4 capitalized words (e.g., Olivia Wilson, Rajesh Kumar)
-    if (line.length <= 40 && /^[A-Za-z\s.'-]+$/.test(line)) {
-      if (candidateNames.length === 0 && (line.split(' ').length >= 2 || line === line.toUpperCase())) {
-        candidateNames.push(line);
-      } else {
-        candidateCompanies.push(line);
+    // 6. Explicit Company Header (e.g., "COMPANY", "Lipi Traders", "Acme Corp")
+    if (lower === 'company' || lower.startsWith('company ') || lower.includes('enterprise') || lower.includes('traders') || lower.includes('technologies') || lower.includes('solutions') || lower.includes('works') || lower.includes('ltd') || lower.includes('pvt')) {
+      candidateCompanies.push(line.replace(/^[|•\-:]\s*/, '').trim());
+      continue;
+    }
+
+    // 7. Person Name Candidates (Clean Alphabetic Title-cased Lines)
+    const alphaOnly = line.replace(/[^a-zA-Z\s]/g, '').trim();
+    const words = alphaOnly.split(/\s+/).filter((w) => w.length >= 2);
+    if (words.length >= 1 && words.length <= 4 && line.length < 35) {
+      // Check if not containing noisy random characters
+      if (!candidateNames.includes(alphaOnly) && alphaOnly.length > 3) {
+        candidateNames.push(alphaOnly);
       }
-    } else if (line.length < 60) {
-      candidateCompanies.push(line);
     }
   }
 
-  // Fallbacks & Synthesis
-  let personName = candidateNames[0] || '';
-  let designation = candidateDesignations[0] || '';
+  // Refine Person Name
+  let personName = '';
+  for (let nameCandidate of candidateNames) {
+    const lower = nameCandidate.toLowerCase();
+    // Exclude if it is part of designation or address
+    if (DESIGNATION_KEYWORDS.some((kw) => lower.includes(kw)) || ADDRESS_KEYWORDS.some((kw) => lower.includes(kw))) {
+      continue;
+    }
+    personName = nameCandidate;
+    break;
+  }
+
+  // Refine Company Name
   let company = candidateCompanies[0] || '';
-
-  // If no company candidate, extract company brand name from email or website domain
   if (!company) {
-    if (websites[0]) {
-      const match = websites[0].match(/https?:\/\/(?:www\.)?([^./]+)/i);
-      if (match && match[1] && !['reallygreatsite', 'example', 'site'].includes(match[1])) {
-        company = match[1].toUpperCase();
-      }
-    } else if (emails[0]) {
-      const match = emails[0].match(/@([^.]+)/);
-      if (match && match[1] && !['gmail', 'yahoo', 'outlook', 'reallygreatsite'].includes(match[1])) {
-        company = match[1].toUpperCase();
+    // If company is in email domain e.g. marcie.thorpe@companyname.com -> COMPANYNAME
+    if (emails[0]) {
+      const domainMatch = emails[0].match(/@([a-zA-Z0-9-]+)\./);
+      if (domainMatch && domainMatch[1] && !['gmail', 'yahoo', 'outlook', 'hotmail', 'icloud', 'reallygreatsite'].includes(domainMatch[1])) {
+        company = domainMatch[1].toUpperCase();
       }
     }
   }
+  if (!company && websites[0]) {
+    const webMatch = websites[0].match(/https?:\/\/(?:www\.)?([a-zA-Z0-9-]+)\./);
+    if (webMatch && webMatch[1] && !['reallygreatsite', 'example', 'site', 'mywebsite'].includes(webMatch[1])) {
+      company = webMatch[1].toUpperCase();
+    }
+  }
 
-  if (!company && personName) {
-    company = designation ? `${personName} ${designation}` : `${personName} Enterprise`;
+  // If still empty, use person's name or fallback
+  if (!company) {
+    if (personName && designation) {
+      company = `${personName} (${designation})`;
+    } else if (personName) {
+      company = `${personName}`;
+    } else {
+      company = 'Business Contact';
+    }
   }
 
   const rawAddress = addresses.join(', ');
 
-  // Auto-generate tags based on content
+  // Auto-generate tags
   const tags = [];
   if (designation) {
-    designation.split(' ').forEach((w) => {
-      if (w.length > 3) tags.push(w);
-    });
+    tags.push(designation);
   }
   if (company && company !== personName) {
     tags.push(company);
@@ -190,9 +234,9 @@ export function parseBusinessCardText(rawText) {
   }
 
   return {
-    person_name: personName || (candidateCompanies[0] ? '' : 'Contact Person'),
+    person_name: personName || 'Contact Person',
     designation: designation || '',
-    company: company || (personName ? `${personName}'s Business` : 'Visiting Card Contact'),
+    company: company,
     website: websites[0] || '',
     phones: phones,
     emails: emails,
