@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { mockBusinesses } from '../data/mockData';
+import { apiClient } from '../services/api';
 
 // Fixed Development Test Accounts
 export const DEV_TEST_ACCOUNTS = {
@@ -145,14 +146,19 @@ export function AuthProvider({ children }) {
   const sendOtp = async (phone) => {
     setIsLoading(true);
     setPendingPhone(phone);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    
+    // Trigger real backend API network call
+    await apiClient.sendOtp(phone);
+    
     setIsLoading(false);
     return { success: true, message: 'OTP sent successfully (Code: 123456)' };
   };
 
   const verifyOtp = async (phone, enteredOtp) => {
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    // Trigger real backend API network call
+    const apiRes = await apiClient.verifyOtp(phone, enteredOtp);
 
     // Match against development test accounts
     let matchedAccount = null;
@@ -173,7 +179,7 @@ export function AuthProvider({ children }) {
       matchedAccount = {
         phone,
         otp: '123456',
-        role: 'user', // Initial default until onboarding completed
+        role: 'user',
         name: '',
         city: 'Coimbatore',
         state: 'Tamil Nadu',
@@ -190,10 +196,10 @@ export function AuthProvider({ children }) {
       return { success: false, error: 'Invalid OTP. For dev testing, use OTP: 123456' };
     }
 
-    const mockJwt = `cf_jwt_${matchedAccount.role}_${Date.now()}`;
+    const liveJwt = apiRes?.data?.access_token || `cf_jwt_${matchedAccount.role}_${Date.now()}`;
     setUser(matchedAccount);
     setRole(matchedAccount.role);
-    setToken(mockJwt);
+    setToken(liveJwt);
     setIsNewUser(isBrandNew);
 
     if (matchedAccount.role === 'owner' && matchedAccount.ownedBusinessIds?.length) {
@@ -202,7 +208,7 @@ export function AuthProvider({ children }) {
 
     try {
       localStorage.setItem('cf_user', JSON.stringify(matchedAccount));
-      localStorage.setItem('cf_token', mockJwt);
+      localStorage.setItem('cf_token', liveJwt);
     } catch (e) {}
 
     setIsLoading(false);

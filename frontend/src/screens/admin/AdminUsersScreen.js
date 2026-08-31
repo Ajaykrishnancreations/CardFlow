@@ -47,9 +47,19 @@ export function AdminUsersScreen() {
     setTimeout(() => setToastMsg(''), 3500);
   };
 
-  const handleGrantAccess = () => {
+  const handleGrantAccess = async () => {
     if (!selectedUserForGrant) return;
     const label = grantPlan === '6_months' ? '6 Months Free' : grantPlan === '1_year' ? '1 Year Free' : 'Lifetime Free Access';
+    
+    // Trigger real backend API
+    await apiClient.grantAccess({
+      user_id: selectedUserForGrant.id,
+      phone: selectedUserForGrant.phone,
+      plan: 'premium',
+      duration: grantPlan,
+      notes: 'Admin manual grant'
+    });
+
     setUsers(prev => prev.map(u => {
       if (u.id === selectedUserForGrant.id) {
         return {
@@ -64,12 +74,23 @@ export function AdminUsersScreen() {
     setSelectedUserForGrant(null);
   };
 
-  const handleCreateBusiness = () => {
+  const handleCreateBusiness = async () => {
     if (!newBizOwnerName || !newBizOwnerPhone || !newBizName) {
       alert('Please fill owner name, phone number, and business name.');
       return;
     }
     const label = newBizPlan === '6_months' ? '6 Months Free Access' : newBizPlan === '1_year' ? '1 Year Free Access' : 'Lifetime Free Access';
+    
+    // Trigger real backend API
+    await apiClient.createBusinessManual({
+      owner_name: newBizOwnerName,
+      owner_phone: newBizOwnerPhone,
+      business_name: newBizName,
+      category: newBizCategory,
+      city: newBizCity,
+      free_access_plan: newBizPlan
+    });
+
     const newUser = {
       id: 'usr-' + Date.now(),
       name: newBizOwnerName,

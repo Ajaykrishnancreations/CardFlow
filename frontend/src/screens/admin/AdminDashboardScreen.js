@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import {
   ShieldAlert,
@@ -9,14 +9,38 @@ import {
   CheckCircle2,
   AlertTriangle,
   ChevronRight,
-  TrendingUp
+  TrendingUp,
+  Sparkles
 } from 'lucide-react';
 import { colors, radii, spacing, typography, shadows } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { useAuth } from '../../context/AuthContext';
+import { apiClient } from '../../services/api';
 
 export function AdminDashboardScreen({ onNavigate }) {
+  const { token } = useAuth();
+  const [stats, setStats] = useState({
+    total_users: 1420,
+    active_businesses: 480,
+    verified_businesses: 342,
+    pending_verifications: 12,
+    total_cards_scanned: 18540,
+    active_subscriptions: 184,
+    mrr_inr: 74200
+  });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      const data = await apiClient.getAdminDashboard(token);
+      if (data) {
+        setStats((prev) => ({ ...prev, ...data }));
+      }
+    };
+    fetchStats();
+  }, [token]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
       <View style={styles.header}>
@@ -35,7 +59,7 @@ export function AdminDashboardScreen({ onNavigate }) {
           <View style={[styles.kpiIcon, { backgroundColor: '#EFF6FF' }]}>
             <Users size={20} color={colors.primary} />
           </View>
-          <Text style={styles.kpiValue}>1,420</Text>
+          <Text style={styles.kpiValue}>{stats.total_users || 1420}</Text>
           <Text style={styles.kpiLabel}>Total Users</Text>
           <Text style={styles.kpiSub}>+48 this week</Text>
         </Card>
@@ -44,7 +68,7 @@ export function AdminDashboardScreen({ onNavigate }) {
           <View style={[styles.kpiIcon, { backgroundColor: '#ECFDF5' }]}>
             <Building2 size={20} color={colors.verifiedGst} />
           </View>
-          <Text style={styles.kpiValue}>310</Text>
+          <Text style={styles.kpiValue}>{stats.verified_businesses || 342}</Text>
           <Text style={styles.kpiLabel}>Verified Listings</Text>
           <Text style={styles.kpiSub}>Coimbatore launch</Text>
         </Card>
@@ -53,68 +77,61 @@ export function AdminDashboardScreen({ onNavigate }) {
           <View style={[styles.kpiIcon, { backgroundColor: '#FEF3C7' }]}>
             <ShieldAlert size={20} color={colors.warning} />
           </View>
-          <Text style={styles.kpiValue}>14</Text>
+          <Text style={styles.kpiValue}>{stats.pending_verifications || 12}</Text>
           <Text style={styles.kpiLabel}>Pending KYC</Text>
           <Text style={[styles.kpiSub, { color: colors.danger }]}>Requires review</Text>
         </Card>
 
         <Card style={styles.kpiCard}>
-          <View style={[styles.kpiIcon, { backgroundColor: '#EEF2FF' }]}>
-            <Camera size={20} color={colors.secondary} />
+          <View style={[styles.kpiIcon, { backgroundColor: '#F5F3FF' }]}>
+            <Camera size={20} color={colors.accentPurple} />
           </View>
-          <Text style={styles.kpiValue}>840</Text>
-          <Text style={styles.kpiLabel}>Scans Today</Text>
+          <Text style={styles.kpiValue}>{stats.total_cards_scanned || 18540}</Text>
+          <Text style={styles.kpiLabel}>Scans Total</Text>
           <Text style={styles.kpiSub}>AI extraction p50: 3.2s</Text>
         </Card>
       </View>
 
-      {/* Urgent Action Banner */}
-      <Card style={styles.alertCard} onPress={() => onNavigate('admin_kyc')}>
-        <View style={styles.alertHeader}>
-          <AlertTriangle size={20} color={colors.warning} />
-          <Text style={styles.alertTitle}>14 Business Verifications Pending Review</Text>
+      {/* Compliance & Approvals Banner */}
+      <Card style={styles.alertBanner} onPress={() => onNavigate('admin_kyc')}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={styles.alertIconWrap}>
+            <AlertTriangle size={18} color="#D97706" />
+          </View>
+          <View style={{ flex: 1, marginLeft: spacing.md }}>
+            <Text style={styles.alertTitle}>12 Verification Requests in Queue</Text>
+            <Text style={styles.alertSub}>3 GSTIN mismatched names, 9 automated score &gt; 95%</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
         </View>
-        <Text style={styles.alertDesc}>
-          Businesses with slight trade-name discrepancies or manual document uploads are awaiting admin verification.
-        </Text>
-        <Button
-          title="Open KYC Review Queue"
-          onPress={() => onNavigate('admin_kyc')}
-          size="sm"
-          variant="outline"
-          style={{ marginTop: spacing.md, borderColor: '#B45309' }}
-        />
       </Card>
 
-      {/* Quick Nav Modules */}
-      <Text style={styles.sectionTitle}>Administration Modules</Text>
+      {/* Quick Admin Actions */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>QUICK ADMIN ACTIONS</Text>
+      </View>
 
-      <Card style={styles.moduleCard} onPress={() => onNavigate('admin_users')}>
-        <Users size={20} color={colors.primary} style={{ marginRight: spacing.md }} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.moduleName}>User Directory & Roles</Text>
-          <Text style={styles.moduleDesc}>Inspect accounts, ban abusers, view scan quotas</Text>
-        </View>
-        <ChevronRight size={18} color={colors.textMuted} />
-      </Card>
+      <View style={styles.quickGrid}>
+        <TouchableOpacity
+          style={styles.actionCard}
+          activeOpacity={0.8}
+          onPress={() => onNavigate('admin_users')}
+        >
+          <Users size={22} color={colors.primary} />
+          <Text style={styles.actionCardTitle}>Manage Users</Text>
+          <Text style={styles.actionCardSub}>Grant Free Access & Subscriptions</Text>
+        </TouchableOpacity>
 
-      <Card style={styles.moduleCard} onPress={() => onNavigate('admin_businesses')}>
-        <Building2 size={20} color={colors.verifiedGst} style={{ marginRight: spacing.md }} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.moduleName}>Business Listings Management</Text>
-          <Text style={styles.moduleDesc}>Delist, suspend, or override search visibility</Text>
-        </View>
-        <ChevronRight size={18} color={colors.textMuted} />
-      </Card>
-
-      <Card style={styles.moduleCard} onPress={() => onNavigate('admin_settings')}>
-        <CheckCircle2 size={20} color={colors.secondary} style={{ marginRight: spacing.md }} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.moduleName}>System Settings & Feature Flags</Text>
-          <Text style={styles.moduleDesc}>Pre-moderation toggles, sponsored slot limits</Text>
-        </View>
-        <ChevronRight size={18} color={colors.textMuted} />
-      </Card>
+        <TouchableOpacity
+          style={styles.actionCard}
+          activeOpacity={0.8}
+          onPress={() => onNavigate('admin_businesses')}
+        >
+          <Building2 size={22} color={colors.verifiedGst} />
+          <Text style={styles.actionCardTitle}>Listings Directory</Text>
+          <Text style={styles.actionCardSub}>Moderate shops & verification</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -133,18 +150,18 @@ const styles = StyleSheet.create({
   },
   badgeRow: {
     flexDirection: 'row',
-    marginBottom: 4
+    marginBottom: spacing.xs
   },
   adminTag: {
     backgroundColor: '#FEE2E2',
-    paddingVertical: 3,
     paddingHorizontal: 8,
-    borderRadius: radii.full
+    paddingVertical: 2,
+    borderRadius: radii.xs
   },
   adminTagText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#DC2626',
+    color: colors.danger,
     letterSpacing: 0.5
   },
   title: {
@@ -153,28 +170,30 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   subtitle: {
-    ...typography.caption,
+    ...typography.bodyMedium,
     color: colors.textSecondary,
     marginTop: 2
   },
   kpiGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: spacing.md
+    gap: spacing.sm,
+    marginBottom: spacing.lg
   },
   kpiCard: {
-    width: '48.5%',
+    width: 'calc(50% - 6px)',
+    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
     padding: spacing.md,
-    marginBottom: spacing.sm
+    cursor: 'pointer'
   },
   kpiIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: radii.md,
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xs
+    marginBottom: spacing.sm
   },
   kpiValue: {
     fontSize: 22,
@@ -189,48 +208,64 @@ const styles = StyleSheet.create({
   },
   kpiSub: {
     fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 2
+    fontWeight: '700',
+    color: colors.primary,
+    marginTop: 4
   },
-  alertCard: {
-    backgroundColor: '#FEF3C7',
+  alertBanner: {
+    backgroundColor: '#FFFBEB',
     borderColor: '#FDE68A',
-    padding: spacing.lg,
-    marginBottom: spacing.lg
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    cursor: 'pointer'
   },
-  alertHeader: {
-    flexDirection: 'row',
+  alertIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FEF3C7',
     alignItems: 'center',
-    marginBottom: spacing.xs
+    justifyContent: 'center'
   },
   alertTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#92400E',
-    marginLeft: spacing.sm
+    color: '#92400E'
   },
-  alertDesc: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#78350F'
+  alertSub: {
+    fontSize: 11,
+    color: '#B45309',
+    marginTop: 1
   },
-  sectionTitle: {
-    ...typography.titleSmall,
-    color: colors.textPrimary,
-    marginBottom: spacing.md
-  },
-  moduleCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
+  sectionHeader: {
     marginBottom: spacing.sm
   },
-  moduleName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    letterSpacing: 0.5
   },
-  moduleDesc: {
+  quickGrid: {
+    flexDirection: 'row',
+    gap: spacing.sm
+  },
+  actionCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    cursor: 'pointer'
+  },
+  actionCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: spacing.sm
+  },
+  actionCardSub: {
     fontSize: 11,
     color: colors.textSecondary,
     marginTop: 2
