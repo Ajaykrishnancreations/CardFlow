@@ -144,7 +144,7 @@ func resolveUserFromTokenOrPhone(token string) *domain.User {
 		}
 	}
 
-	// For any other phone or string, generate deterministic unique UUID
+	// For any other token string, generate deterministic unique UUID
 	h := sha1.New()
 	h.Write([]byte(token))
 	deterministicUUID, _ := uuid.FromBytes(h.Sum(nil)[:16])

@@ -30,6 +30,8 @@ func NewCardService(db *database.DB, s3 *storage.S3Service, ext *extractor.Gemin
 }
 
 func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]domain.SavedCard, error) {
+	var cards []domain.SavedCard
+
 	if s.db != nil && s.db.Pool != nil {
 		rows, err := s.db.Pool.Query(ctx, `
 			SELECT id, user_id, COALESCE(person_name, ''), COALESCE(designation, ''), COALESCE(company, ''),
@@ -41,7 +43,6 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 		`, userID)
 		if err == nil {
 			defer rows.Close()
-			var cards []domain.SavedCard
 			for rows.Next() {
 				var c domain.SavedCard
 				var contactType, extractStatus string
@@ -103,23 +104,24 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 					cards = append(cards, c)
 				}
 			}
-
-			if len(cards) > 0 {
-				return cards, nil
-			}
 		}
 	}
 
-	// In-memory user-specific vault lookup
+	// Also check in-memory cache
 	s.vaultMutex.RLock()
-	userCards, exists := s.memoryVault[userID]
+	memCards := s.memoryVault[userID]
 	s.vaultMutex.RUnlock()
 
-	if exists {
-		return userCards, nil
+	// If DB had cards, return them
+	if len(cards) > 0 {
+		return cards, nil
 	}
 
-	// Empty initial state for new users (no cross-contamination)
+	if len(memCards) > 0 {
+		return memCards, nil
+	}
+
+	// Empty initial state for new users
 	return []domain.SavedCard{}, nil
 }
 
@@ -142,11 +144,24 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 
 	// 2. Save to PostgreSQL if connected
 	if s.db != nil && s.db.Pool != nil {
+		// Ensure user exists in users table to satisfy foreign key
+		_, _ = s.db.Pool.Exec(ctx, `
+			INSERT INTO users (id, phone, name, city, state, country, role, plan, status, free_scans_remaining)
+			VALUES ($1, '+910000000000', 'CardFlow User', 'Coimbatore', 'Tamil Nadu', 'IN', 'user', 'free', 'active', 30)
+			ON CONFLICT (id) DO NOTHING
+		`, userID)
+
 		_, err := s.db.Pool.Exec(ctx, `
 			INSERT INTO saved_cards (
 				id, user_id, person_name, designation, company, website,
 				notes, met_context, contact_type, extract_status
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'business', 'extracted')
+			ON CONFLICT (id) DO UPDATE SET
+				person_name = EXCLUDED.person_name,
+				company = EXCLUDED.company,
+				designation = EXCLUDED.designation,
+				website = EXCLUDED.website,
+				notes = EXCLUDED.notes
 		`, card.ID, userID, card.PersonName, card.Designation, card.Company, card.Website, card.Notes, card.MetContext)
 		if err != nil {
 			return &card, nil
@@ -175,6 +190,20 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 				VALUES ($1, $2)
 				ON CONFLICT (saved_card_id) DO UPDATE SET raw_address = EXCLUDED.raw_address
 			`, card.ID, card.RawAddress)
+		}
+
+		// Insert tags
+		for _, t := range card.Tags {
+			tagID := uuid.New()
+			_ = s.db.Pool.QueryRow(ctx, `
+				INSERT INTO tags (id, name, is_system) VALUES ($1, $2, false)
+				ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id
+			`, tagID, t).Scan(&tagID)
+
+			_, _ = s.db.Pool.Exec(ctx, `
+				INSERT INTO saved_card_tags (saved_card_id, tag_id) VALUES ($1, $2)
+				ON CONFLICT DO NOTHING
+			`, card.ID, tagID)
 		}
 	}
 

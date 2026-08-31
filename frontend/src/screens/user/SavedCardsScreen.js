@@ -25,7 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 
 export function SavedCardsScreen({ onScanNewCard }) {
-  const { user, token, loadUserVault } = useAuth();
+  const { user, token, savedCards: contextCards, loadUserVault } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
 
@@ -36,35 +36,45 @@ export function SavedCardsScreen({ onScanNewCard }) {
 
   const allTags = ['all', 'BNI Chapter', 'CA / Finance', 'Supplier', 'Vendor', 'CODISSIA', 'Metals', 'Scrap', 'Verified', 'Business Card'];
 
+  const formatCards = (cardList) => {
+    if (!cardList || !Array.isArray(cardList)) return [];
+    return cardList.map((c) => ({
+      id: c.id || Math.random().toString(),
+      personName: c.person_name || c.personName || 'Business Contact',
+      designation: c.designation || 'Partner',
+      company: c.company || 'Enterprise',
+      phones: c.phones || [{ raw: '+91 96555 87877', is_whatsapp: true }],
+      emails: c.emails || ['contact@enterprise.com'],
+      website: c.website || '',
+      rawAddress: c.raw_address || c.rawAddress || 'Coimbatore, Tamil Nadu',
+      notes: c.notes || '',
+      privateRating: c.private_rating || c.privateRating || 5,
+      tags: c.tags || ['Verified'],
+      savedAt: c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : '2026-08-31',
+      hasFrontImage: true,
+      hasBackImage: false,
+      extractStatus: c.extract_status || c.extractStatus || 'extracted'
+    }));
+  };
+
   const loadCards = async () => {
     setIsLoading(true);
     try {
       const liveCards = await apiClient.getCards(token);
       if (liveCards && liveCards.length > 0) {
-        const formatted = liveCards.map((c) => ({
-          id: c.id,
-          personName: c.person_name || 'Business Contact',
-          designation: c.designation || 'Partner',
-          company: c.company || 'Enterprise',
-          phones: c.phones || [{ raw: '+91 96555 87877', is_whatsapp: true }],
-          emails: c.emails || ['contact@enterprise.com'],
-          website: c.website || '',
-          rawAddress: c.raw_address || 'Coimbatore, Tamil Nadu',
-          notes: c.notes || '',
-          privateRating: c.private_rating || 5,
-          tags: c.tags || ['Verified'],
-          savedAt: c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : '2026-08-31',
-          hasFrontImage: true,
-          hasBackImage: false,
-          extractStatus: c.extract_status || 'extracted'
-        }));
-        setCards(formatted);
+        setCards(formatCards(liveCards));
+      } else if (contextCards && contextCards.length > 0) {
+        setCards(formatCards(contextCards));
       } else {
         setCards([]);
       }
     } catch (e) {
       console.warn('Error loading cards:', e);
-      setCards([]);
+      if (contextCards && contextCards.length > 0) {
+        setCards(formatCards(contextCards));
+      } else {
+        setCards([]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -73,6 +83,14 @@ export function SavedCardsScreen({ onScanNewCard }) {
   useEffect(() => {
     loadCards();
   }, [token]);
+
+  // Sync if context cards updated
+  useEffect(() => {
+    if (contextCards && contextCards.length > 0) {
+      setCards(formatCards(contextCards));
+      setIsLoading(false);
+    }
+  }, [contextCards]);
 
   const filteredCards = cards.filter((c) => {
     if (selectedTag !== 'all' && !c.tags.includes(selectedTag)) return false;
