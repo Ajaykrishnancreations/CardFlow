@@ -42,7 +42,7 @@ func (s *BusinessService) GetOwnerBusinesses(ctx context.Context, ownerUserID uu
 		// Fallback for DEV mode
 		return []domain.Business{
 			{
-				ID:              uuid.MustParse("b0000000-0000-0000-0000-000000000001"),
+				ID:              uuid.MustParse("00000000-0000-0000-0000-0000000000b1"),
 				OwnerUserID:     ownerUserID,
 				Name:            "Kovai Precision Tools",
 				Slug:            "kovai-precision-tools",
@@ -61,7 +61,7 @@ func (s *BusinessService) GetOwnerBusinesses(ctx context.Context, ownerUserID uu
 				Phones:          []string{"+919443012345"},
 			},
 			{
-				ID:              uuid.MustParse("b0000000-0000-0000-0000-000000000002"),
+				ID:              uuid.MustParse("00000000-0000-0000-0000-0000000000b2"),
 				OwnerUserID:     ownerUserID,
 				Name:            "Apex Infotech Solutions",
 				Slug:            "apex-infotech-solutions",

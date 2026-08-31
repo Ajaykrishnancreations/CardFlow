@@ -97,7 +97,7 @@ func (s *CardService) ProcessOCR(ctx context.Context, userID uuid.UUID, imageKey
 func (s *CardService) getFallbackCards(userID uuid.UUID) []domain.SavedCard {
 	return []domain.SavedCard{
 		{
-			ID:            uuid.MustParse("d0000000-0000-0000-0000-000000000001"),
+			ID:            uuid.MustParse("00000000-0000-0000-0000-0000000000d1"),
 			UserID:        userID,
 			PersonName:    "R. Rajesh Kumar",
 			Designation:   "Managing Director",
@@ -113,7 +113,7 @@ func (s *CardService) getFallbackCards(userID uuid.UUID) []domain.SavedCard {
 			UpdatedAt:     time.Now(),
 		},
 		{
-			ID:            uuid.MustParse("d0000000-0000-0000-0000-000000000002"),
+			ID:            uuid.MustParse("00000000-0000-0000-0000-0000000000d2"),
 			UserID:        userID,
 			PersonName:    "Anita Sharma",
 			Designation:   "VP of Procurement",

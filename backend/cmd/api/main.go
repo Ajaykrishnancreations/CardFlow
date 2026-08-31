@@ -94,7 +94,21 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	// Health Check
+	// Root & Health Check
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		response.JSON(w, http.StatusOK, map[string]interface{}{
+			"name":        "CardFlow Modular Monolith API",
+			"status":      "online",
+			"version":     "1.0.0",
+			"docs":        "/api/v1",
+			"environment": cfg.Env,
+			"timestamp":   time.Now(),
+		})
+	})
+	r.Head("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		response.JSON(w, http.StatusOK, map[string]interface{}{
 			"status":    "healthy",
@@ -102,6 +116,9 @@ func main() {
 			"version":   "1.0.0",
 			"env":       cfg.Env,
 		})
+	})
+	r.Head("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
 	})
 
 	// Public Web Profile Route (e.g. https://cardflow.app/b/kovai-precision-tools)

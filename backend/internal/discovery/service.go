@@ -266,23 +266,23 @@ func (s *DiscoveryService) getBusinessPhones(ctx context.Context, bizID uuid.UUI
 
 func (s *DiscoveryService) getFallbackCategories() []domain.Category {
 	return []domain.Category{
-		{ID: uuid.MustParse("c0000000-0000-0000-0000-000000000001"), Name: "Manufacturing", Slug: "manufacturing", Icon: "Factory", SortOrder: 1, IsActive: true, Count: 24},
-		{ID: uuid.MustParse("c0000000-0000-0000-0000-000000000002"), Name: "IT & Software", Slug: "it-software", Icon: "Code", SortOrder: 2, IsActive: true, Count: 38},
-		{ID: uuid.MustParse("c0000000-0000-0000-0000-000000000003"), Name: "Textiles & Garments", Slug: "textiles", Icon: "Shirt", SortOrder: 3, IsActive: true, Count: 45},
-		{ID: uuid.MustParse("c0000000-0000-0000-0000-000000000004"), Name: "Hardware & Materials", Slug: "hardware", Icon: "Wrench", SortOrder: 4, IsActive: true, Count: 19},
-		{ID: uuid.MustParse("c0000000-0000-0000-0000-000000000005"), Name: "Electrical & Automation", Slug: "electrical", Icon: "Zap", SortOrder: 5, IsActive: true, Count: 16},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-0000000000c1"), Name: "Manufacturing", Slug: "manufacturing", Icon: "Factory", SortOrder: 1, IsActive: true, Count: 24},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-0000000000c2"), Name: "IT & Software", Slug: "it-software", Icon: "Code", SortOrder: 2, IsActive: true, Count: 38},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-0000000000c3"), Name: "Textiles & Garments", Slug: "textiles", Icon: "Shirt", SortOrder: 3, IsActive: true, Count: 45},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-0000000000c4"), Name: "Hardware & Materials", Slug: "hardware", Icon: "Wrench", SortOrder: 4, IsActive: true, Count: 19},
+		{ID: uuid.MustParse("00000000-0000-0000-0000-0000000000c5"), Name: "Electrical & Automation", Slug: "electrical", Icon: "Zap", SortOrder: 5, IsActive: true, Count: 16},
 	}
 }
 
 func (s *DiscoveryService) getFallbackBusinesses(query, catID string) []domain.Business {
 	all := []domain.Business{
 		{
-			ID:                uuid.MustParse("b0000000-0000-0000-0000-000000000001"),
-			OwnerUserID:       uuid.MustParse("u0000000-0000-0000-0000-000000000002"),
+			ID:                uuid.MustParse("00000000-0000-0000-0000-0000000000b1"),
+			OwnerUserID:       uuid.MustParse("00000000-0000-0000-0000-000000000002"),
 			Name:              "Kovai Precision Tools",
 			Slug:              "kovai-precision-tools",
 			Description:       "Leading manufacturers of CNC machined precision components, hydraulic valves, and automotive fittings.",
-			PrimaryCategoryID: uuid.MustParse("c0000000-0000-0000-0000-000000000001"),
+			PrimaryCategoryID: uuid.MustParse("00000000-0000-0000-0000-0000000000c1"),
 			PrimaryCategory:   "Manufacturing",
 			AddressLine1:      "42, SIDCO Industrial Estate",
 			Locality:          strPtr("Peelamedu"),
@@ -306,12 +306,12 @@ func (s *DiscoveryService) getFallbackBusinesses(query, catID string) []domain.B
 			Phones:            []string{"+919443012345"},
 		},
 		{
-			ID:                uuid.MustParse("b0000000-0000-0000-0000-000000000002"),
-			OwnerUserID:       uuid.MustParse("u0000000-0000-0000-0000-000000000002"),
+			ID:                uuid.MustParse("00000000-0000-0000-0000-0000000000b2"),
+			OwnerUserID:       uuid.MustParse("00000000-0000-0000-0000-000000000002"),
 			Name:              "Apex Infotech Solutions",
 			Slug:              "apex-infotech-solutions",
 			Description:       "Enterprise ERP, Cloud Migration, and Custom Web & Mobile Application Development for MSMEs.",
-			PrimaryCategoryID: uuid.MustParse("c0000000-0000-0000-0000-000000000002"),
+			PrimaryCategoryID: uuid.MustParse("00000000-0000-0000-0000-0000000000c2"),
 			PrimaryCategory:   "IT & Software",
 			AddressLine1:      "105, Cross Cut Road",
 			Locality:          strPtr("Gandhipuram"),
