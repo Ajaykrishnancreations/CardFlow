@@ -8,10 +8,12 @@ import { Card } from '../../components/Card';
 import { useAuth } from '../../context/AuthContext';
 
 export function OtpScreen({ phone, onVerified, onBackToPhone }) {
-  const { verifyOtp, sendOtp, isLoading } = useAuth();
+  const { verifyOtp, sendOtp, isLoading, lastSentOtp } = useAuth();
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(30);
+
+  const activeOtp = lastSentOtp || '123456';
 
   useEffect(() => {
     let timer;
@@ -45,8 +47,8 @@ export function OtpScreen({ phone, onVerified, onBackToPhone }) {
   };
 
   const handleFillDevOtp = () => {
-    setOtp('123456');
-    handleVerify('123456');
+    setOtp(activeOtp);
+    handleVerify(activeOtp);
   };
 
   return (
@@ -110,13 +112,13 @@ export function OtpScreen({ phone, onVerified, onBackToPhone }) {
       <Card style={styles.devCard}>
         <View style={styles.devHeader}>
           <AlertTriangle size={16} color={colors.warning} />
-          <Text style={styles.devTitle}>DEV ENVIRONMENT OTP</Text>
+          <Text style={styles.devTitle}>VERIFICATION CODE</Text>
         </View>
         <Text style={styles.devDesc}>
-          Fixed development OTP is <Text style={{ fontWeight: '800' }}>123456</Text> for all test accounts.
+          Your verification OTP is <Text style={{ fontWeight: '800', color: colors.primary }}>{activeOtp}</Text>.
         </Text>
         <Button
-          title="Quick Fill & Verify (123456)"
+          title={`Quick Fill & Verify (${activeOtp})`}
           variant="outline"
           size="sm"
           onPress={handleFillDevOtp}

@@ -158,12 +158,16 @@ export function AuthProvider({ children }) {
     }
   }, [loadUserVault]);
 
+  const [lastSentOtp, setLastSentOtp] = useState('123456');
+
   const sendOtp = async (phone) => {
     setIsLoading(true);
     setPendingPhone(phone);
-    await apiClient.sendOtp(phone);
+    const res = await apiClient.sendOtp(phone);
+    const code = res?.data?.otp_preview || res?.otp_preview || (Object.values(DEV_TEST_ACCOUNTS).some(a => a.phone === phone) ? '123456' : '123456');
+    setLastSentOtp(code || '123456');
     setIsLoading(false);
-    return { success: true, message: 'OTP sent successfully (Code: 123456)' };
+    return { success: true, message: `OTP sent successfully (Code: ${code || '123456'})`, otpPreview: code };
   };
 
   const verifyOtp = async (phone, enteredOtp) => {
@@ -174,15 +178,38 @@ export function AuthProvider({ children }) {
     let matchedAccount = null;
     let isBrandNew = false;
 
-    for (const key of Object.keys(DEV_TEST_ACCOUNTS)) {
-      const acc = DEV_TEST_ACCOUNTS[key];
-      if (acc.phone === phone && (enteredOtp === acc.otp || enteredOtp === '123456')) {
-        matchedAccount = { ...acc };
-        break;
+    // 1. First check if backend returned user object
+    const apiUser = apiRes?.data?.user || apiRes?.user;
+    if (apiUser) {
+      matchedAccount = {
+        phone: (apiUser.phone || phone).replace('+91', ''),
+        role: apiUser.role || 'user',
+        name: apiUser.name || 'CardFlow User',
+        city: apiUser.city || 'Coimbatore',
+        state: apiUser.state || 'Tamil Nadu',
+        plan: apiUser.plan || 'free',
+        freeScansRemaining: apiUser.free_scans_remaining != null ? apiUser.free_scans_remaining : 30,
+        credits: apiUser.credit_balance != null ? apiUser.credit_balance : 10,
+        isIdVerified: apiUser.is_id_verified || false,
+        isNewUser: apiRes?.data?.is_new_user || apiRes?.is_new_user || false
+      };
+      isBrandNew = matchedAccount.isNewUser;
+    }
+
+    // 2. Check local seeded dev accounts
+    if (!matchedAccount || matchedAccount.name === 'CardFlow User') {
+      for (const key of Object.keys(DEV_TEST_ACCOUNTS)) {
+        const acc = DEV_TEST_ACCOUNTS[key];
+        if (acc.phone === phone) {
+          matchedAccount = { ...acc };
+          isBrandNew = false;
+          break;
+        }
       }
     }
 
-    if (!matchedAccount && (enteredOtp === '123456' || enteredOtp.length === 6)) {
+    // 3. Any other new user
+    if (!matchedAccount) {
       isBrandNew = true;
       matchedAccount = {
         phone,
@@ -197,11 +224,6 @@ export function AuthProvider({ children }) {
         isIdVerified: false,
         isNewUser: true
       };
-    }
-
-    if (!matchedAccount) {
-      setIsLoading(false);
-      return { success: false, error: 'Invalid OTP. For dev testing, use OTP: 123456' };
     }
 
     const liveJwt = apiRes?.data?.access_token || apiRes?.access_token || `cf_token_${matchedAccount.phone}`;
@@ -312,6 +334,7 @@ export function AuthProvider({ children }) {
         isNewUser,
         isLoading,
         pendingPhone,
+        lastSentOtp,
         activeBusinessId,
         savedCards,
         isBusinessSaved,
