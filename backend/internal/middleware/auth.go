@@ -125,7 +125,7 @@ func resolveUserFromTokenOrPhone(token string) *domain.User {
 	}
 	if strings.Contains(token, "9677840181") || strings.Contains(token, "dharani") {
 		return &domain.User{
-			ID:     uuid.MustParse("00000000-0000-0000-0000-0000000000u1"),
+			ID:     uuid.MustParse("00000000-0000-0000-0000-0000000000a4"),
 			Phone:  "+919677840181",
 			Name:   "Dharani",
 			Role:   domain.RoleUser,
@@ -135,7 +135,7 @@ func resolveUserFromTokenOrPhone(token string) *domain.User {
 	}
 	if strings.Contains(token, "1234567890") || strings.Contains(token, "ravi") {
 		return &domain.User{
-			ID:     uuid.MustParse("00000000-0000-0000-0000-0000000000u2"),
+			ID:     uuid.MustParse("00000000-0000-0000-0000-0000000000a5"),
 			Phone:  "+911234567890",
 			Name:   "Ravi Kumar",
 			Role:   domain.RoleUser,

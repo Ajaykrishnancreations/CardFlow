@@ -192,9 +192,9 @@ func GetDeterministicUserID(phone string) uuid.UUID {
 	case "9876543210":
 		return uuid.MustParse("00000000-0000-0000-0000-000000000002")
 	case "9677840181":
-		return uuid.MustParse("00000000-0000-0000-0000-0000000000u1")
+		return uuid.MustParse("00000000-0000-0000-0000-0000000000a4")
 	case "1234567890":
-		return uuid.MustParse("00000000-0000-0000-0000-0000000000u2")
+		return uuid.MustParse("00000000-0000-0000-0000-0000000000a5")
 	default:
 		h := sha1.New()
 		h.Write([]byte(phone))
