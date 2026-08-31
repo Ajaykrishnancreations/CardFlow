@@ -17,15 +17,26 @@ const getBaseUrl = () => {
 
 export const API_BASE_URL = getBaseUrl();
 
+// Normalizes 10-digit or raw numbers to E.164 (+91...)
+const formatE164 = (raw) => {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
+  if (raw.startsWith('+')) return raw;
+  return `+91${digits}`;
+};
+
 export const apiClient = {
   // 1. Auth: Send OTP
   async sendOtp(phone) {
-    console.log('📡 [API CALL] POST /auth/otp/send', { phone });
+    const formattedPhone = formatE164(phone);
+    console.log('📡 [API CALL] POST /auth/otp/send', { phone: formattedPhone });
     try {
       const res = await fetch(`${API_BASE_URL}/auth/otp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, platform: 'web', device_id: 'browser-client' })
+        body: JSON.stringify({ phone: formattedPhone, platform: 'web', device_id: 'browser-client' })
       });
       const data = await res.json();
       console.log('📥 [API RESPONSE] /auth/otp/send', data);
@@ -38,12 +49,13 @@ export const apiClient = {
 
   // 2. Auth: Verify OTP
   async verifyOtp(phone, otp) {
-    console.log('📡 [API CALL] POST /auth/otp/verify', { phone, otp });
+    const formattedPhone = formatE164(phone);
+    console.log('📡 [API CALL] POST /auth/otp/verify', { phone: formattedPhone, otp });
     try {
       const res = await fetch(`${API_BASE_URL}/auth/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp, platform: 'web', device_id: 'browser-client' })
+        body: JSON.stringify({ phone: formattedPhone, otp, otp_code: otp, platform: 'web', device_id: 'browser-client' })
       });
       const data = await res.json();
       console.log('📥 [API RESPONSE] /auth/otp/verify', data);
@@ -187,37 +199,39 @@ export const apiClient = {
 
   // 10. Admin: Grant Free Access
   async grantAccess(payload, token = '') {
-    console.log('📡 [API CALL] POST /admin/users/grant-access', payload);
+    console.log('📡 [API CALL] POST /admin/grant-access', payload);
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${API_BASE_URL}/admin/users/grant-access`, {
+      const res = await fetch(`${API_BASE_URL}/admin/grant-access`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
       });
-      return await res.json();
+      const data = await res.json();
+      return data.data || data;
     } catch (e) {
-      console.warn('API /admin/users/grant-access failed:', e);
-      return { status: 'success' };
+      console.warn('API /admin/grant-access failed:', e);
+      return null;
     }
   },
 
   // 11. Admin: Create Business Manually
   async createBusinessManual(payload, token = '') {
-    console.log('📡 [API CALL] POST /admin/businesses/manual-create', payload);
+    console.log('📡 [API CALL] POST /admin/businesses/manual', payload);
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${API_BASE_URL}/admin/businesses/manual-create`, {
+      const res = await fetch(`${API_BASE_URL}/admin/businesses/manual`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
       });
-      return await res.json();
+      const data = await res.json();
+      return data.data || data;
     } catch (e) {
-      console.warn('API /admin/businesses/manual-create failed:', e);
-      return { status: 'success' };
+      console.warn('API /admin/businesses/manual failed:', e);
+      return null;
     }
   }
 };
