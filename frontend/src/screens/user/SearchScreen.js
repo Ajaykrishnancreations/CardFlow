@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
-import { Search, SlidersHorizontal, MapPin, Building2, Phone, MessageSquare, Navigation, Check, BookmarkCheck } from 'lucide-react';
+import { Search, SlidersHorizontal, MapPin, Building2, Phone, MessageSquare, Navigation, Check, BookmarkCheck, Sparkles } from 'lucide-react';
 import { colors, radii, spacing, typography, shadows } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { BrandSpinner, SkeletonCard } from '../../components/Loader';
 import { categories, mockBusinesses } from '../../data/mockData';
 import { useAuth } from '../../context/AuthContext';
 
@@ -16,8 +17,17 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
   const [selectedRadius, setSelectedRadius] = useState(10); // km
   const [gstOnly, setGstOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
 
   const radiusOptions = [2, 5, 10, 25];
+
+  const handleCategorySelect = (catId) => {
+    setIsSearching(true);
+    setSelectedCat(catId);
+    setTimeout(() => {
+      setIsSearching(false);
+    }, 250);
+  };
 
   const filteredBusinesses = mockBusinesses.filter((biz) => {
     if (selectedCat !== 'all' && biz.categoryId !== selectedCat) return false;
@@ -95,7 +105,7 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catChipsScroll}>
           <TouchableOpacity
             style={[styles.catChip, selectedCat === 'all' && styles.catChipActive]}
-            onPress={() => setSelectedCat('all')}
+            onPress={() => handleCategorySelect('all')}
           >
             <Text style={[styles.catChipText, selectedCat === 'all' && styles.catChipTextActive]}>
               All Categories
@@ -105,7 +115,7 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
             <TouchableOpacity
               key={c.id}
               style={[styles.catChip, selectedCat === c.id && styles.catChipActive]}
-              onPress={() => setSelectedCat(c.id)}
+              onPress={() => handleCategorySelect(c.id)}
             >
               <Text style={[styles.catChipText, selectedCat === c.id && styles.catChipTextActive]}>
                 {c.name}
@@ -115,15 +125,20 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
         </ScrollView>
       </View>
 
-      {/* Search Results List */}
+      {/* Search Results List or Animated Skeletons */}
       <ScrollView contentContainerStyle={styles.resultsScroll} showsVerticalScrollIndicator={false}>
         <View style={styles.resultsMetaRow}>
           <Text style={styles.resultsCount}>
-            {filteredBusinesses.length} verified businesses found
+            {isSearching ? 'Filtering businesses...' : `${filteredBusinesses.length} verified businesses found`}
           </Text>
         </View>
 
-        {filteredBusinesses.length === 0 ? (
+        {isSearching ? (
+          <View style={styles.loadingWrapper}>
+            <BrandSpinner size={28} text="Searching directory..." />
+            <SkeletonCard count={3} />
+          </View>
+        ) : filteredBusinesses.length === 0 ? (
           <EmptyState
             icon={Building2}
             title="No businesses found"
@@ -349,6 +364,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.textSecondary
+  },
+  loadingWrapper: {
+    width: '100%',
+    alignItems: 'center'
   },
   bizCard: {
     marginBottom: spacing.md,

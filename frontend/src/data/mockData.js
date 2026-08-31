@@ -156,39 +156,4 @@ export const mockBusinesses = [
   }
 ];
 
-export const mockSavedCards = [
-  {
-    id: 'card-1',
-    personName: 'Ramesh Sundaram',
-    designation: 'Senior CA & Tax Advisor',
-    company: 'Sundaram & Associates CA',
-    phones: [{ raw: '+91 98430 99887', isWhatsapp: true, label: 'Work' }],
-    emails: ['ramesh@sundaramca.in'],
-    website: 'https://sundaramca.in',
-    rawAddress: '14, Race Course Road, Coimbatore - 641018',
-    notes: 'Met at BNI Coimbatore Achievers chapter meeting. Expert in GST appeals.',
-    privateRating: 5,
-    tags: ['CA / Finance', 'BNI Chapter', 'Vendor'],
-    savedAt: '2026-08-25',
-    hasFrontImage: true,
-    hasBackImage: false,
-    extractStatus: 'extracted'
-  },
-  {
-    id: 'card-2',
-    personName: 'Anitha Rajendran',
-    designation: 'Managing Partner',
-    company: 'Vanguard Industrial Automation',
-    phones: [{ raw: '+91 97890 44332', isWhatsapp: true, label: 'Mobile' }],
-    emails: ['anitha@vanguardauto.in'],
-    website: 'https://vanguardauto.in',
-    rawAddress: 'Plot 18, CODISSIA Industrial Park, Myleripalayam, Coimbatore',
-    notes: 'Provides PLC and SCADA controllers for CNC machinery.',
-    privateRating: 4,
-    tags: ['Supplier', 'Automation', 'CODISSIA'],
-    savedAt: '2026-08-27',
-    hasFrontImage: true,
-    hasBackImage: true,
-    extractStatus: 'extracted'
-  }
-];
+export const mockSavedCards = [];

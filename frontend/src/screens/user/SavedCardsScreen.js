@@ -13,12 +13,14 @@ import {
   Trash2,
   FileSpreadsheet,
   Plus,
-  RefreshCw
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { BrandSpinner, SkeletonCard } from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 
@@ -30,36 +32,42 @@ export function SavedCardsScreen({ onScanNewCard }) {
   const [cards, setCards] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('all');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const allTags = ['all', 'BNI Chapter', 'CA / Finance', 'Supplier', 'Vendor', 'CODISSIA', 'Metals', 'Scrap', 'Verified', 'Business Card'];
 
   const loadCards = async () => {
     setIsLoading(true);
-    const liveCards = await apiClient.getCards(token);
-    if (liveCards && liveCards.length > 0) {
-      const formatted = liveCards.map((c) => ({
-        id: c.id,
-        personName: c.person_name || 'Business Contact',
-        designation: c.designation || 'Partner',
-        company: c.company || 'Enterprise',
-        phones: c.phones || [{ raw: '+91 96555 87877', is_whatsapp: true }],
-        emails: c.emails || ['contact@enterprise.com'],
-        website: c.website || '',
-        rawAddress: c.raw_address || 'Coimbatore, Tamil Nadu',
-        notes: c.notes || '',
-        privateRating: c.private_rating || 5,
-        tags: c.tags || ['Verified'],
-        savedAt: c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : '2026-08-31',
-        hasFrontImage: true,
-        hasBackImage: false,
-        extractStatus: c.extract_status || 'extracted'
-      }));
-      setCards(formatted);
-    } else {
+    try {
+      const liveCards = await apiClient.getCards(token);
+      if (liveCards && liveCards.length > 0) {
+        const formatted = liveCards.map((c) => ({
+          id: c.id,
+          personName: c.person_name || 'Business Contact',
+          designation: c.designation || 'Partner',
+          company: c.company || 'Enterprise',
+          phones: c.phones || [{ raw: '+91 96555 87877', is_whatsapp: true }],
+          emails: c.emails || ['contact@enterprise.com'],
+          website: c.website || '',
+          rawAddress: c.raw_address || 'Coimbatore, Tamil Nadu',
+          notes: c.notes || '',
+          privateRating: c.private_rating || 5,
+          tags: c.tags || ['Verified'],
+          savedAt: c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : '2026-08-31',
+          hasFrontImage: true,
+          hasBackImage: false,
+          extractStatus: c.extract_status || 'extracted'
+        }));
+        setCards(formatted);
+      } else {
+        setCards([]);
+      }
+    } catch (e) {
+      console.warn('Error loading cards:', e);
       setCards([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -151,23 +159,26 @@ export function SavedCardsScreen({ onScanNewCard }) {
         </ScrollView>
       </View>
 
-      {/* Cards List */}
+      {/* Cards List or Animated Loader */}
       <ScrollView contentContainerStyle={[styles.cardsScroll, isDesktop && styles.desktopCardsScroll]} showsVerticalScrollIndicator={false}>
         <View style={styles.resultsCountRow}>
           <Text style={styles.resultsCountText}>
-            {filteredCards.length} Cards in {user?.name ? `${user.name}'s Vault` : 'Your Vault'}
+            {isLoading
+              ? 'Loading your personal vault...'
+              : `${filteredCards.length} Cards in ${user?.name ? `${user.name}'s Vault` : 'Your Vault'}`}
           </Text>
         </View>
 
-        {filteredCards.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <BrandSpinner size={32} text="Loading your saved cards..." />
+            <SkeletonCard count={isDesktop ? 4 : 2} />
+          </View>
+        ) : filteredCards.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
-            title={isLoading ? 'Loading your vault...' : 'No cards saved in your vault'}
-            description={
-              isLoading
-                ? 'Fetching your cards from the database...'
-                : 'Scan or upload visiting cards, or save businesses from Discover to build your card vault.'
-            }
+            title="No cards saved in your vault"
+            description="Scan or upload visiting cards, or save businesses from Discover to build your card vault."
             actionTitle="Scan New Business Card"
             onAction={onScanNewCard}
           />
@@ -339,6 +350,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.textSecondary
+  },
+  loadingContainer: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   cardsGrid: {
     flexDirection: 'column',
