@@ -2,15 +2,8 @@
 // Automatically connects to local backend (http://127.0.0.1:8080) or live Render backend
 
 const getBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    // If running in browser on localhost:3000, talk to local Go backend at 8080
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://127.0.0.1:8080/api/v1';
-    }
-    // If running on Render or other web host, use the current domain or Render URL
-    if (window.location.origin.includes('onrender.com')) {
-      return `${window.location.origin}/api/v1`;
-    }
+  if (typeof window !== 'undefined' && window.location.origin.includes('onrender.com')) {
+    return `${window.location.origin}/api/v1`;
   }
   return 'https://cardflow-api-fsij.onrender.com/api/v1';
 };
