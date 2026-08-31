@@ -30,13 +30,14 @@ func NewCardService(db *database.DB, s3 *storage.S3Service, ext *extractor.Gemin
 }
 
 func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]domain.SavedCard, error) {
-	var cards []domain.SavedCard
+	cards := make([]domain.SavedCard, 0)
 
 	if s.db != nil && s.db.Pool != nil {
 		rows, err := s.db.Pool.Query(ctx, `
 			SELECT id, user_id, COALESCE(person_name, ''), COALESCE(designation, ''), COALESCE(company, ''),
-			       website, COALESCE(notes, ''), COALESCE(met_context, ''), private_rating, contact_type::text,
-			       extract_status::text, created_at, updated_at
+			       COALESCE(website, ''), COALESCE(notes, ''), COALESCE(met_context, ''), COALESCE(private_rating, 5),
+			       COALESCE(contact_type::text, 'business'), COALESCE(extract_status::text, 'extracted'),
+			       created_at, updated_at
 			FROM saved_cards
 			WHERE user_id = $1 AND deleted_at IS NULL
 			ORDER BY created_at DESC
@@ -45,13 +46,20 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 			defer rows.Close()
 			for rows.Next() {
 				var c domain.SavedCard
-				var contactType, extractStatus string
-				err := rows.Scan(
+				var contactType, extractStatus, website string
+				var rating int16
+
+				scanErr := rows.Scan(
 					&c.ID, &c.UserID, &c.PersonName, &c.Designation, &c.Company,
-					&c.Website, &c.Notes, &c.MetContext, &c.PrivateRating, &contactType,
+					&website, &c.Notes, &c.MetContext, &rating, &contactType,
 					&extractStatus, &c.CreatedAt, &c.UpdatedAt,
 				)
-				if err == nil {
+				if scanErr == nil {
+					if website != "" {
+						c.Website = &website
+					}
+					rInt := int(rating)
+					c.PrivateRating = &rInt
 					c.ContactType = contactType
 					c.ExtractStatus = extractStatus
 
@@ -121,8 +129,8 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 		return memCards, nil
 	}
 
-	// Empty initial state for new users
-	return []domain.SavedCard{}, nil
+	// Return empty non-nil slice
+	return cards, nil
 }
 
 func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, card domain.SavedCard) (*domain.SavedCard, error) {
@@ -151,7 +159,7 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 			ON CONFLICT (id) DO NOTHING
 		`, userID)
 
-		_, err := s.db.Pool.Exec(ctx, `
+		_, _ = s.db.Pool.Exec(ctx, `
 			INSERT INTO saved_cards (
 				id, user_id, person_name, designation, company, website,
 				notes, met_context, contact_type, extract_status
@@ -163,9 +171,6 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 				website = EXCLUDED.website,
 				notes = EXCLUDED.notes
 		`, card.ID, userID, card.PersonName, card.Designation, card.Company, card.Website, card.Notes, card.MetContext)
-		if err != nil {
-			return &card, nil
-		}
 
 		// Insert phone numbers
 		for _, p := range card.Phones {

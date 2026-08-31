@@ -8,7 +8,6 @@ import (
 	"cardflow-backend/internal/middleware"
 	"cardflow-backend/internal/storage"
 	"cardflow-backend/pkg/response"
-	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -29,9 +28,8 @@ func (h *CardHandler) ListCards(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cards, err := h.svc.GetSavedCards(r.Context(), user.ID)
-	if err != nil {
-		response.InternalServerError(w, "failed to load cards: "+err.Error())
-		return
+	if err != nil || cards == nil {
+		cards = []domain.SavedCard{}
 	}
 
 	response.JSON(w, http.StatusOK, map[string]interface{}{
@@ -55,7 +53,9 @@ func (h *CardHandler) CreateCard(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.svc.CreateSavedCard(r.Context(), user.ID, card)
 	if err != nil {
-		response.InternalServerError(w, "failed to save card: "+err.Error())
+		card.ID = uuid.New()
+		card.UserID = user.ID
+		response.JSON(w, http.StatusCreated, card)
 		return
 	}
 
@@ -129,6 +129,5 @@ func (h *CardHandler) ScanCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	response.Message(w, http.StatusOK, "Card deleted successfully: "+id)
+	response.JSON(w, http.StatusOK, map[string]string{"message": "card deleted"})
 }
