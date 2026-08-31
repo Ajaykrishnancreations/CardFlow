@@ -33,6 +33,7 @@ import { AdminUsersScreen } from '../screens/admin/AdminUsersScreen';
 import { AdminBusinessesScreen } from '../screens/admin/AdminBusinessesScreen';
 import { AdminVerificationScreen } from '../screens/admin/AdminVerificationScreen';
 import { AdminSettingsScreen } from '../screens/admin/AdminSettingsScreen';
+import { AdminSupportScreen } from '../screens/admin/AdminSupportScreen';
 
 export function AppNavigator() {
   const { isAuthenticated, role, isNewUser, pendingPhone, setUser, logout } = useAuth();
@@ -172,6 +173,8 @@ export function AppNavigator() {
           return <AdminBusinessesScreen />;
         case 'admin_kyc':
           return <AdminVerificationScreen />;
+        case 'admin_support':
+          return <AdminSupportScreen />;
         case 'admin_settings':
           return <AdminSettingsScreen />;
         case 'admin_dashboard':
@@ -268,6 +271,7 @@ export function AppNavigator() {
     if (currentTab === 'admin_users') return 'User Management';
     if (currentTab === 'admin_businesses') return 'Listing Directory';
     if (currentTab === 'admin_kyc') return 'KYC Review Queue';
+    if (currentTab === 'admin_support') return 'Support & Issue Resolution';
     if (currentTab === 'admin_settings') return 'System Settings';
     return 'CardFlow';
   };

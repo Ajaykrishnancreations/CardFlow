@@ -218,11 +218,11 @@ export const apiClient = {
 
   // 11. Admin: Create Business Manually
   async createBusinessManual(payload, token = '') {
-    console.log('📡 [API CALL] POST /admin/businesses/manual', payload);
+    console.log('📡 [API CALL] POST /admin/businesses/manual-create', payload);
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${API_BASE_URL}/admin/businesses/manual`, {
+      const res = await fetch(`${API_BASE_URL}/admin/businesses/manual-create`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
@@ -230,7 +230,179 @@ export const apiClient = {
       const data = await res.json();
       return data.data || data;
     } catch (e) {
-      console.warn('API /admin/businesses/manual failed:', e);
+      console.warn('API /admin/businesses/manual-create failed:', e);
+      return null;
+    }
+  },
+
+  // 12. Admin: List Businesses
+  async getAdminBusinesses(token = '') {
+    console.log('📡 [API CALL] GET /admin/businesses');
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/admin/businesses`, { headers });
+      const data = await res.json();
+      return data.data?.businesses || data.data || [];
+    } catch (e) {
+      console.warn('API /admin/businesses failed:', e);
+      return [];
+    }
+  },
+
+  // 13. Admin: Update Business Listing
+  async updateAdminBusiness(id, payload, token = '') {
+    console.log(`📡 [API CALL] PUT /admin/businesses/${id}`, payload);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/admin/businesses/${id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      return data.data || data;
+    } catch (e) {
+      console.warn(`API /admin/businesses/${id} failed:`, e);
+      return null;
+    }
+  },
+
+  // 14. Admin: Delete Business Listing
+  async deleteAdminBusiness(id, token = '') {
+    console.log(`📡 [API CALL] DELETE /admin/businesses/${id}`);
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/admin/businesses/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      const data = await res.json();
+      return data.data || data;
+    } catch (e) {
+      console.warn(`API /admin/businesses/${id} failed:`, e);
+      return null;
+    }
+  },
+
+  // 15. Admin: Delete User
+  async deleteAdminUser(id, token = '') {
+    console.log(`📡 [API CALL] DELETE /admin/users/${id}`);
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/admin/users/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      const data = await res.json();
+      return data.data || data;
+    } catch (e) {
+      console.warn(`API /admin/users/${id} failed:`, e);
+      return null;
+    }
+  },
+
+  // 16. Admin: Get KYC Verifications
+  async getAdminVerifications(token = '') {
+    console.log('📡 [API CALL] GET /admin/verification');
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/admin/verification`, { headers });
+      const data = await res.json();
+      return data.data?.queue || data.data || [];
+    } catch (e) {
+      console.warn('API /admin/verification failed:', e);
+      return [];
+    }
+  },
+
+  // 17. Admin: Decide Verification
+  async decideVerification(id, action, notes = '', token = '') {
+    console.log(`📡 [API CALL] POST /admin/verification/${id}/decision`, { action, notes });
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/admin/verification/${id}/decision`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action, notes })
+      });
+      const data = await res.json();
+      return data.data || data;
+    } catch (e) {
+      console.warn(`API /admin/verification/${id}/decision failed:`, e);
+      return null;
+    }
+  },
+
+  // 18. Support: Create Ticket (User / Owner)
+  async createSupportTicket(payload, token = '') {
+    console.log('📡 [API CALL] POST /support/tickets', payload);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/support/tickets`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      return data.data || data;
+    } catch (e) {
+      console.warn('API /support/tickets failed:', e);
+      return null;
+    }
+  },
+
+  // 19. Support: Get My Tickets (User / Owner)
+  async getMySupportTickets(token = '') {
+    console.log('📡 [API CALL] GET /support/tickets/my');
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/support/tickets/my`, { headers });
+      const data = await res.json();
+      return data.data?.tickets || data.data || [];
+    } catch (e) {
+      console.warn('API /support/tickets/my failed:', e);
+      return [];
+    }
+  },
+
+  // 20. Support: Admin List All Tickets
+  async getAdminSupportTickets(token = '') {
+    console.log('📡 [API CALL] GET /admin/support/tickets');
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/admin/support/tickets`, { headers });
+      const data = await res.json();
+      return data.data?.tickets || data.data || [];
+    } catch (e) {
+      console.warn('API /admin/support/tickets failed:', e);
+      return [];
+    }
+  },
+
+  // 21. Support: Admin Update Ticket / Reply
+  async updateAdminSupportTicket(id, payload, token = '') {
+    console.log(`📡 [API CALL] PATCH /admin/support/tickets/${id}`, payload);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/admin/support/tickets/${id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      return data.data || data;
+    } catch (e) {
+      console.warn(`API /admin/support/tickets/${id} failed:`, e);
       return null;
     }
   }

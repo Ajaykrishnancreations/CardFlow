@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal, useWindowDimensions } from 'react-native';
-import { Users, Search, ShieldCheck, UserCheck, Plus, Gift, Check, X, Building, Phone, Calendar } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { Users, Search, ShieldCheck, UserCheck, Plus, Gift, Check, X, Building, Phone, Calendar, Trash2 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
+import { ConfirmModal } from '../../components/ConfirmModal';
 import { apiClient } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const initialUsers = [
   { id: 'usr-ajay', name: 'Ajay', phone: '6382124970', role: 'admin', plan: 'premium', accessPeriod: 'Lifetime Admin Access', city: 'Coimbatore', isIdVerified: true, status: 'active' },
@@ -21,12 +23,16 @@ const initialUsers = [
 
 export function AdminUsersScreen() {
   const { width } = useWindowDimensions();
+  const { token } = useAuth();
   const isDesktop = width >= 860;
   const [users, setUsers] = useState(initialUsers);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   
   // Modals
   const [selectedUserForGrant, setSelectedUserForGrant] = useState(null);
+  const [deletingUser, setDeletingUser] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [grantPlan, setGrantPlan] = useState('6_months');
   const [showAddBizModal, setShowAddBizModal] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -38,6 +44,30 @@ export function AdminUsersScreen() {
   const [newBizCategory, setNewBizCategory] = useState('Manufacturing');
   const [newBizCity, setNewBizCity] = useState('Coimbatore');
   const [newBizPlan, setNewBizPlan] = useState('1_year');
+
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    try {
+      const list = await apiClient.getAdminUsers(token);
+      if (list && Array.isArray(list) && list.length > 0) {
+        setUsers(list.map(u => ({
+          ...u,
+          phone: (u.phone || '').replace('+91', ''),
+          accessPeriod: u.access_period || (u.plan === 'premium' ? 'Lifetime Admin Access' : 'Active Plan'),
+          businessName: u.business_name || u.businessName,
+          isIdVerified: true
+        })));
+      }
+    } catch (e) {
+      console.warn('Error fetching admin users:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const filtered = users.filter((u) =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -75,6 +105,21 @@ export function AdminUsersScreen() {
     }));
     showToast(`Granted ${label} to ${selectedUserForGrant.name} successfully!`);
     setSelectedUserForGrant(null);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deletingUser) return;
+    setIsDeleting(true);
+    try {
+      await apiClient.deleteAdminUser(deletingUser.id, token);
+      setUsers(prev => prev.filter(u => u.id !== deletingUser.id));
+      showToast(`User "${deletingUser.name}" deleted successfully.`);
+      setDeletingUser(null);
+    } catch (e) {
+      alert('Failed to delete user.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleCreateBusiness = async () => {
@@ -165,16 +210,25 @@ export function AdminUsersScreen() {
                     {u.isIdVerified && <Badge type="id" label="Verified" style={{ marginLeft: 6 }} />}
                   </View>
 
-                  {/* Grant Access Action Button for Non-Admins */}
-                  {u.role !== 'admin' && (
+                  {/* Actions for User Card */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {u.role !== 'admin' && (
+                      <TouchableOpacity
+                        style={styles.grantBtn}
+                        onPress={() => setSelectedUserForGrant(u)}
+                      >
+                        <Gift size={12} color={colors.primary} style={{ marginRight: 3 }} />
+                        <Text style={styles.grantBtnText}>Grant Access</Text>
+                      </TouchableOpacity>
+                    )}
+
                     <TouchableOpacity
-                      style={styles.grantBtn}
-                      onPress={() => setSelectedUserForGrant(u)}
+                      style={styles.deleteUserBtn}
+                      onPress={() => setDeletingUser(u)}
                     >
-                      <Gift size={12} color={colors.primary} style={{ marginRight: 3 }} />
-                      <Text style={styles.grantBtnText}>Grant Access</Text>
+                      <Trash2 size={13} color={colors.danger} />
                     </TouchableOpacity>
-                  )}
+                  </View>
                 </View>
 
                 <Text style={styles.phoneText}>+91 {u.phone} • {u.city}</Text>
@@ -342,6 +396,18 @@ export function AdminUsersScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Delete User Confirmation Modal */}
+      <ConfirmModal
+        visible={!!deletingUser}
+        title="Delete User Account"
+        message={`Are you sure you want to delete "${deletingUser?.name}" (+91 ${deletingUser?.phone})? Their account, subscriptions, and access will be permanently revoked.`}
+        confirmText="Delete User"
+        confirmVariant="danger"
+        isLoading={isDeleting}
+        onConfirm={handleDeleteUser}
+        onCancel={() => setDeletingUser(null)}
+      />
     </ScrollView>
   );
 }
@@ -510,6 +576,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: colors.primary
+  },
+  deleteUserBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: radii.sm,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   modalOverlay: {
     flex: 1,

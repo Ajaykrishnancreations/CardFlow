@@ -10,7 +10,8 @@ import {
   AlertTriangle,
   ChevronRight,
   TrendingUp,
-  Sparkles
+  Sparkles,
+  LifeBuoy
 } from 'lucide-react';
 import { colors, radii, spacing, typography, shadows } from '../../theme';
 import { Card } from '../../components/Card';
@@ -130,6 +131,16 @@ export function AdminDashboardScreen({ onNavigate }) {
           <Building2 size={22} color={colors.verifiedGst} />
           <Text style={styles.actionCardTitle}>Listings Directory</Text>
           <Text style={styles.actionCardSub}>Moderate shops & verification</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionCard}
+          activeOpacity={0.8}
+          onPress={() => onNavigate('admin_support')}
+        >
+          <LifeBuoy size={22} color={colors.accentPurple} />
+          <Text style={styles.actionCardTitle}>Support & Tickets</Text>
+          <Text style={styles.actionCardSub}>Resolve user & owner requests</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

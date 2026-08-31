@@ -1,49 +1,82 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { ShieldCheck, Check, X, AlertTriangle, Building2, UserCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { ShieldCheck, Check, X, AlertTriangle, Building2, UserCheck, CheckCircle2 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
+import { apiClient } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
-const mockKycQueue = [
+const initialQueue = [
   {
     id: 'kyc-1',
-    businessName: 'Kovai Precision Tools',
-    enteredName: 'Kovai Precision Tools',
-    registryName: 'KOVAI PRECISION TOOLS PRIVATE LIMITED',
+    business_name: 'Kovai Precision Tools',
+    entered_name: 'Kovai Precision Tools',
+    registry_name: 'KOVAI PRECISION TOOLS PRIVATE LIMITED',
     gstin: '33AAAAA0000A1Z5',
-    matchScore: 92.5,
+    name_match_score: 92.5,
     pincode: '641004',
     city: 'Coimbatore',
-    submittedAt: 'Today, 2:15 PM',
+    submitted_at: 'Today, 2:15 PM',
     status: 'pending'
   },
   {
     id: 'kyc-2',
-    businessName: 'Sri Lakshmi Fabrics',
-    enteredName: 'Sri Lakshmi Fabrics',
-    registryName: 'SRI LAKSHMI TEX MILLS LLP',
+    business_name: 'Sri Lakshmi Fabrics',
+    entered_name: 'Sri Lakshmi Fabrics',
+    registry_name: 'SRI LAKSHMI TEX MILLS LLP',
     gstin: '33CCCCC2222C3Z7',
-    matchScore: 78.0,
+    name_match_score: 78.0,
     pincode: '641015',
     city: 'Coimbatore',
-    submittedAt: 'Today, 11:30 AM',
+    submitted_at: 'Today, 11:30 AM',
     status: 'pending'
   }
 ];
 
 export function AdminVerificationScreen() {
-  const [queue, setQueue] = useState(mockKycQueue);
+  const { token } = useAuth();
+  const [queue, setQueue] = useState(initialQueue);
+  const [isLoading, setIsLoading] = useState(true);
+  const [processingId, setProcessingId] = useState(null);
+  const [toast, setToast] = useState('');
 
-  const handleResolve = (id, action) => {
-    setQueue((prev) => prev.filter((item) => item.id !== id));
-    alert(`Verification ${action.toUpperCase()} processed. Listing search visibility updated.`);
+  const fetchQueue = async () => {
+    setIsLoading(true);
+    try {
+      const list = await apiClient.getAdminVerifications(token);
+      if (list && Array.isArray(list) && list.length > 0) {
+        setQueue(list);
+      }
+    } catch (e) {
+      console.warn('Error fetching KYC queue:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQueue();
+  }, []);
+
+  const handleResolve = async (id, action) => {
+    setProcessingId(id);
+    try {
+      await apiClient.decideVerification(id, action, 'Processed by admin', token);
+      setQueue((prev) => prev.filter((item) => item.id !== id));
+      setToast(`KYC request ${action === 'approve' ? 'APPROVED & LISTED' : 'REJECTED'} successfully.`);
+    } catch (e) {
+      alert('Failed to submit decision.');
+    } finally {
+      setProcessingId(null);
+      setTimeout(() => setToast(''), 3500);
+    }
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.title}>KYC Verification Queue</Text>
         <Text style={styles.subtitle}>
@@ -51,61 +84,78 @@ export function AdminVerificationScreen() {
         </Text>
       </View>
 
-      {queue.length === 0 ? (
+      {toast ? (
+        <View style={styles.toastBox}>
+          <CheckCircle2 size={16} color="#065F46" style={{ marginRight: 6 }} />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      ) : null}
+
+      {isLoading ? (
+        <View style={styles.centerLoading}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={{ marginTop: 8, color: colors.textSecondary }}>Checking verification queue...</Text>
+        </View>
+      ) : queue.length === 0 ? (
         <EmptyState
           icon={ShieldCheck}
           title="KYC Queue is Clear"
-          description="All submitted business verification requests have been reviewed."
+          description="All submitted business verification requests have been reviewed and approved."
         />
       ) : (
-        queue.map((item) => (
-          <Card key={item.id} style={styles.kycCard}>
-            <View style={styles.kycHeader}>
-              <View style={styles.logoWrap}>
-                <Building2 size={20} color={colors.primary} />
+        queue.map((item) => {
+          const isCurrentProcessing = processingId === item.id;
+          return (
+            <Card key={item.id} style={styles.kycCard}>
+              <View style={styles.kycHeader}>
+                <View style={styles.logoWrap}>
+                  <Building2 size={20} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.bizName}>{item.business_name || item.businessName}</Text>
+                  <Text style={styles.metaText}>GSTIN: {item.gstin} • {item.city} ({item.pincode})</Text>
+                </View>
+                <View style={styles.scoreBadge}>
+                  <Text style={styles.scoreText}>{item.name_match_score || item.matchScore}% Match</Text>
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.bizName}>{item.businessName}</Text>
-                <Text style={styles.metaText}>GSTIN: {item.gstin} • {item.city} ({item.pincode})</Text>
-              </View>
-              <View style={styles.scoreBadge}>
-                <Text style={styles.scoreText}>{item.matchScore}% Match</Text>
-              </View>
-            </View>
 
-            {/* Side-by-side comparison */}
-            <View style={styles.comparisonBox}>
-              <View style={styles.compareRow}>
-                <Text style={styles.compareLabel}>Entered Name:</Text>
-                <Text style={styles.enteredValue}>{item.enteredName}</Text>
+              {/* Side-by-side comparison */}
+              <View style={styles.comparisonBox}>
+                <View style={styles.compareRow}>
+                  <Text style={styles.compareLabel}>Entered Name:</Text>
+                  <Text style={styles.enteredValue}>{item.entered_name || item.enteredName}</Text>
+                </View>
+                <View style={styles.compareRow}>
+                  <Text style={styles.compareLabel}>Govt Registry Name:</Text>
+                  <Text style={styles.registryValue}>{item.registry_name || item.registryName}</Text>
+                </View>
               </View>
-              <View style={styles.compareRow}>
-                <Text style={styles.compareLabel}>Govt Registry Name:</Text>
-                <Text style={styles.registryValue}>{item.registryName}</Text>
-              </View>
-            </View>
 
-            {/* Action Buttons */}
-            <View style={styles.actionsRow}>
-              <Button
-                title="Reject"
-                variant="danger"
-                size="sm"
-                icon={X}
-                style={{ flex: 1, marginRight: spacing.sm }}
-                onPress={() => handleResolve(item.id, 'reject')}
-              />
-              <Button
-                title="Approve & List"
-                variant="primary"
-                size="sm"
-                icon={Check}
-                style={{ flex: 1 }}
-                onPress={() => handleResolve(item.id, 'approve')}
-              />
-            </View>
-          </Card>
-        ))
+              {/* Action Buttons */}
+              <View style={styles.actionsRow}>
+                <Button
+                  title="Reject"
+                  variant="danger"
+                  size="sm"
+                  icon={X}
+                  style={{ flex: 1, marginRight: spacing.sm }}
+                  onPress={() => handleResolve(item.id, 'reject')}
+                  disabled={isCurrentProcessing}
+                />
+                <Button
+                  title="Approve & List"
+                  variant="primary"
+                  size="sm"
+                  icon={Check}
+                  style={{ flex: 1.5 }}
+                  onPress={() => handleResolve(item.id, 'approve')}
+                  disabled={isCurrentProcessing}
+                />
+              </View>
+            </Card>
+          );
+        })
       )}
     </ScrollView>
   );
@@ -121,7 +171,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl
   },
   header: {
-    marginBottom: spacing.lg
+    marginBottom: spacing.md
   },
   title: {
     ...typography.titleMedium,
@@ -132,7 +182,25 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: 2
   },
+  toastBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    padding: spacing.md,
+    borderRadius: radii.md,
+    marginBottom: spacing.md
+  },
+  toastText: {
+    fontSize: 13,
+    color: '#065F46',
+    fontWeight: '600'
+  },
+  centerLoading: {
+    paddingVertical: spacing.xxl,
+    alignItems: 'center'
+  },
   kycCard: {
+    padding: spacing.md,
     marginBottom: spacing.md
   },
   kycHeader: {
@@ -147,55 +215,55 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md
+    marginRight: spacing.sm
   },
   bizName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textPrimary
   },
   metaText: {
     fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 1
+    color: colors.textMuted
   },
   scoreBadge: {
     backgroundColor: '#ECFDF5',
-    paddingVertical: 3,
     paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: radii.full
   },
   scoreText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.verifiedGst
   },
   comparisonBox: {
     backgroundColor: colors.bgMuted,
-    padding: spacing.md,
+    padding: spacing.sm,
     borderRadius: radii.md,
-    marginVertical: spacing.sm
+    marginBottom: spacing.md
   },
   compareRow: {
     marginBottom: 4
   },
   compareLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    color: colors.textMuted
+    color: colors.textMuted,
+    fontWeight: '600',
+    textTransform: 'uppercase'
   },
   enteredValue: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.textPrimary
   },
   registryValue: {
     fontSize: 13,
     fontWeight: '700',
-    color: colors.primaryDark
+    color: colors.primary
   },
   actionsRow: {
     flexDirection: 'row',
-    marginTop: spacing.sm
+    alignItems: 'center'
   }
 });

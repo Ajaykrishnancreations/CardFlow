@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import {
   User,
@@ -10,16 +10,19 @@ import {
   Building2,
   FileText,
   HelpCircle,
-  Briefcase
+  Briefcase,
+  LifeBuoy
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { SupportModal } from '../../components/SupportModal';
 import { useAuth } from '../../context/AuthContext';
 
 export function ProfileScreen({ onSwitchToOwner }) {
   const { user, role, logout } = useAuth();
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -90,9 +93,9 @@ export function ProfileScreen({ onSwitchToOwner }) {
           <ChevronRight size={18} color={colors.textMuted} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem} onPress={() => alert('CardFlow Support: support@cardflow.app')}>
-          <HelpCircle size={18} color={colors.textSecondary} style={{ marginRight: spacing.md }} />
-          <Text style={styles.menuText}>Help & Support</Text>
+        <TouchableOpacity style={styles.menuItem} onPress={() => setShowSupportModal(true)}>
+          <LifeBuoy size={18} color={colors.primary} style={{ marginRight: spacing.md }} />
+          <Text style={[styles.menuText, { color: colors.primary, fontWeight: '700' }]}>Help & Support Center</Text>
           <ChevronRight size={18} color={colors.textMuted} />
         </TouchableOpacity>
 
@@ -101,6 +104,12 @@ export function ProfileScreen({ onSwitchToOwner }) {
           <Text style={[styles.menuText, { color: colors.danger }]}>Log Out</Text>
         </TouchableOpacity>
       </Card>
+
+      {/* 24/7 In-App Support Modal */}
+      <SupportModal
+        visible={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
+      />
     </ScrollView>
   );
 }

@@ -12,7 +12,8 @@ import {
   BarChart3,
   Users,
   ShieldAlert,
-  Settings
+  Settings,
+  LifeBuoy
 } from 'lucide-react';
 import { colors, radii, spacing } from '../theme';
 import { useAuth } from '../context/AuthContext';
@@ -26,8 +27,8 @@ export function TabBar({ currentTab, onSelectTab }) {
         { id: 'admin_dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'admin_users', label: 'Users', icon: Users },
         { id: 'admin_businesses', label: 'Listings', icon: Building2 },
-        { id: 'admin_kyc', label: 'KYC Queue', icon: ShieldAlert },
-        { id: 'admin_settings', label: 'Settings', icon: Settings }
+        { id: 'admin_kyc', label: 'KYC', icon: ShieldAlert },
+        { id: 'admin_support', label: 'Support', icon: LifeBuoy }
       ];
     }
 

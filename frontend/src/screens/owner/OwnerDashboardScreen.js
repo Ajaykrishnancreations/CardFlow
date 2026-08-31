@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import {
   Building2,
@@ -14,17 +14,20 @@ import {
   Phone,
   MessageSquare,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  LifeBuoy
 } from 'lucide-react';
 import { colors, radii, spacing, typography, shadows } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { SupportModal } from '../../components/SupportModal';
 import { mockBusinesses } from '../../data/mockData';
 import { useAuth } from '../../context/AuthContext';
 
 export function OwnerDashboardScreen({ onNavigate, onShowQr, onShareCard }) {
   const { user, activeBusinessId, switchActiveBusiness } = useAuth();
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   // Find active business or fallback
   const activeBiz = mockBusinesses.find((b) => b.id === activeBusinessId) || mockBusinesses[0];
@@ -146,6 +149,18 @@ export function OwnerDashboardScreen({ onNavigate, onShowQr, onShareCard }) {
           <Text style={styles.gridTitle}>Analytics</Text>
           <Text style={styles.gridSub}>Call & WhatsApp clicks</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.gridItem}
+          activeOpacity={0.8}
+          onPress={() => setShowSupportModal(true)}
+        >
+          <View style={[styles.gridIconCircle, { backgroundColor: '#EFF6FF' }]}>
+            <LifeBuoy size={22} color={colors.primary} />
+          </View>
+          <Text style={styles.gridTitle}>Support Service</Text>
+          <Text style={styles.gridSub}>Request help & resolution</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Subscription Status Card */}
@@ -165,6 +180,12 @@ export function OwnerDashboardScreen({ onNavigate, onShowQr, onShareCard }) {
           onPress={() => alert('Subscription Tier: Business Plus (Active until Sept 2026).')}
         />
       </Card>
+
+      {/* In-App Support Modal */}
+      <SupportModal
+        visible={showSupportModal}
+        onClose={() => setShowSupportModal(false)}
+      />
     </ScrollView>
   );
 }

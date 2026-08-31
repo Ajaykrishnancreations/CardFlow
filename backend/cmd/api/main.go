@@ -25,6 +25,7 @@ import (
 	"cardflow-backend/internal/extractor"
 	"cardflow-backend/internal/middleware"
 	"cardflow-backend/internal/storage"
+	"cardflow-backend/internal/support"
 	"cardflow-backend/pkg/response"
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -78,6 +79,7 @@ func main() {
 	enquiryHandler := enquiry.NewEnquiryHandler(dbPool)
 	billingHandler := billing.NewBillingHandler(dbPool)
 	adminHandler := admin.NewAdminHandler(dbPool)
+	supportHandler := support.NewSupportHandler(dbPool)
 
 	// 5. Setup Router & Routes
 	r := chi.NewRouter()
@@ -148,8 +150,10 @@ func main() {
 			r.Post("/cards/scan", cardHandler.ScanCard)
 			r.Delete("/cards/{id}", cardHandler.DeleteCard)
 
-			// Customer Enquiries
+			// Customer Enquiries & In-App Support Tickets
 			r.Post("/enquiries", enquiryHandler.CreateEnquiry)
+			r.Post("/support/tickets", supportHandler.CreateTicket)
+			r.Get("/support/tickets/my", supportHandler.GetMyTickets)
 
 			// Billing & Credits
 			r.Get("/billing/plans", billingHandler.GetPlans)
@@ -172,13 +176,20 @@ func main() {
 
 				r.Get("/dashboard", adminHandler.GetDashboard)
 				r.Get("/users", adminHandler.ListUsers)
+				r.Delete("/users/{id}", adminHandler.DeleteUser)
 				r.Patch("/users/{id}/status", adminHandler.UpdateUserStatus)
 				r.Post("/users/grant-access", adminHandler.GrantFreeAccess)
 				r.Get("/businesses", adminHandler.ListBusinesses)
+				r.Put("/businesses/{id}", adminHandler.UpdateBusiness)
+				r.Delete("/businesses/{id}", adminHandler.DeleteBusiness)
 				r.Post("/businesses/manual-create", adminHandler.CreateBusinessManual)
 				r.Get("/verification", adminHandler.ListPendingVerifications)
 				r.Post("/verification/{id}/decision", adminHandler.VerifyDecision)
 				r.Get("/audit-logs", adminHandler.ListAuditLogs)
+
+				// Admin Support Ticket Management
+				r.Get("/support/tickets", supportHandler.AdminListTickets)
+				r.Patch("/support/tickets/{id}", supportHandler.AdminUpdateTicket)
 			})
 		})
 	})
