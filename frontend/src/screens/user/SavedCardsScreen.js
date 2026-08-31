@@ -54,7 +54,9 @@ export function SavedCardsScreen({ onScanNewCard }) {
         hasBackImage: false,
         extractStatus: c.extract_status || 'extracted'
       }));
-      setCards([...formatted, ...mockSavedCards]);
+      setCards(formatted);
+    } else {
+      setCards([]);
     }
     setIsLoading(false);
   };
