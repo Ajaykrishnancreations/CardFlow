@@ -26,6 +26,7 @@ type SendOTPRequest struct {
 type VerifyOTPRequest struct {
 	Phone     string `json:"phone"`
 	OTPCode   string `json:"otp_code"`
+	OTP       string `json:"otp"`
 	DeviceID  string `json:"device_id"`
 	Platform  string `json:"platform"`
 	PushToken string `json:"push_token"`
@@ -61,7 +62,12 @@ func (h *AuthHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenPair, err := h.authSvc.VerifyOTP(r.Context(), req.Phone, req.OTPCode, req.DeviceID, req.Platform, req.PushToken)
+	code := req.OTPCode
+	if code == "" {
+		code = req.OTP
+	}
+
+	tokenPair, err := h.authSvc.VerifyOTP(r.Context(), req.Phone, code, req.DeviceID, req.Platform, req.PushToken)
 	if err != nil {
 		response.BadRequest(w, err.Error(), nil)
 		return
