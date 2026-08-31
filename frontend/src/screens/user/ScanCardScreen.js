@@ -15,9 +15,7 @@ import {
   ArrowRight,
   RotateCw,
   VideoOff,
-  SwitchCamera,
-  Layers,
-  FileImage
+  SwitchCamera
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Button } from '../../components/Button';
@@ -26,6 +24,7 @@ import { Badge } from '../../components/Badge';
 import { Input } from '../../components/Input';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
+import { extractCardWithTesseract } from '../../utils/ocrParser';
 
 export function ScanCardScreen({ onCardSaved }) {
   const { user, token } = useAuth();
@@ -43,11 +42,12 @@ export function ScanCardScreen({ onCardSaved }) {
   const [cameraError, setCameraError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [scanStatusText, setScanStatusText] = useState('AI Vision OCR Scanning...');
   const [isSaving, setIsSaving] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Editable Form fields (Dynamic values directly from OCR / editable by user)
+  // Editable Form fields
   const [company, setCompany] = useState('');
   const [personName, setPersonName] = useState('');
   const [designation, setDesignation] = useState('');
@@ -68,7 +68,7 @@ export function ScanCardScreen({ onCardSaved }) {
     setIsCameraActive(false);
   };
 
-  // Start live device camera (Mobile back camera or desktop webcam)
+  // Start live device camera
   const startCamera = async (facing = cameraFacing) => {
     setCameraError('');
     setSelectedImage(null);
@@ -96,7 +96,7 @@ export function ScanCardScreen({ onCardSaved }) {
         setIsCameraActive(true);
       }
     } catch (err) {
-      console.warn('Camera permission error or back camera unavailable, falling back:', err);
+      console.warn('Camera error, fallback to default:', err);
       try {
         const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         if (videoRef.current) {
@@ -110,31 +110,31 @@ export function ScanCardScreen({ onCardSaved }) {
     }
   };
 
-  // Flip camera between front and back (on mobile / external webcam)
+  // Flip camera
   const toggleCameraFacing = () => {
     const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
     setCameraFacing(nextFacing);
     startCamera(nextFacing);
   };
 
-  // Capture frame from active live camera video stream
+  // Capture frame from live camera video stream
   const captureFromCamera = () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
 
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
     stopCameraStream();
     setSelectedImage(dataUrl);
 
-    // Trigger AI OCR extraction on live captured image
-    processScan('live-camera-scan.jpg');
+    // Trigger Dynamic AI OCR extraction on captured image
+    processScan(dataUrl);
   };
 
   // Process file upload or drag-drop file
@@ -143,8 +143,9 @@ export function ScanCardScreen({ onCardSaved }) {
     stopCameraStream();
     const reader = new FileReader();
     reader.onload = (event) => {
-      setSelectedImage(event.target.result);
-      processScan(file.name || 'uploaded-card.jpg');
+      const imgData = event.target.result;
+      setSelectedImage(imgData);
+      processScan(imgData);
     };
     reader.readAsDataURL(file);
   };
@@ -154,7 +155,7 @@ export function ScanCardScreen({ onCardSaved }) {
     if (file) handleProcessFile(file);
   };
 
-  // Drag and drop listeners on web desktop
+  // Drag and drop listeners
   const handleDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -173,7 +174,7 @@ export function ScanCardScreen({ onCardSaved }) {
     }
   };
 
-  // Clipboard Paste support (Ctrl+V / Cmd+V)
+  // Clipboard Paste support
   useEffect(() => {
     const handlePaste = (e) => {
       if (e.clipboardData && e.clipboardData.items) {
@@ -195,29 +196,50 @@ export function ScanCardScreen({ onCardSaved }) {
     };
   }, []);
 
-  // AI Extraction call via live backend endpoint
-  const processScan = async (imageKey = 'live-scan.jpg') => {
+  // Truly Dynamic OCR Extraction for Any Card
+  const processScan = async (imageSource) => {
     setIsScanning(true);
+    setScanStatusText('Extracting Text & Contact Information with AI OCR...');
     setSuccessMsg('');
 
-    const result = await apiClient.scanCard(imageKey, token);
+    try {
+      // 1. Run in-browser high-precision OCR on actual captured image
+      const ocrResult = await extractCardWithTesseract(imageSource);
+      console.log('✨ [OCR Parsed Result]:', ocrResult);
 
-    if (result) {
-      setExtractedData(result);
-      setCompany(result.company || 'LIPI TRADERS');
-      setPersonName(result.person_name || 'Sivakumar');
-      setDesignation(result.designation || 'Managing Partner');
-      setPhone(result.phones?.[0]?.raw || '+91 96555 87877');
-      setEmail(result.emails?.[0] || 'sivakumar@lipi-traders.com');
-      setWebsite(result.website || 'http://lipi-traders.com');
-      setRawAddress(result.raw_address || '214/1P, Ambigai nagar, Chinnavedapatti, Coimbatore, Tamil Nadu 641049');
-      setTags(result.tags && result.tags.length > 0 ? result.tags.join(', ') : 'Iron, Scrap, Steel, Metals, Coimbatore');
+      if (ocrResult && (ocrResult.person_name || ocrResult.company || ocrResult.phones.length > 0 || ocrResult.emails.length > 0)) {
+        setExtractedData(ocrResult);
+        setCompany(ocrResult.company || '');
+        setPersonName(ocrResult.person_name || '');
+        setDesignation(ocrResult.designation || '');
+        setPhone(ocrResult.phones?.[0]?.raw || '');
+        setEmail(ocrResult.emails?.[0] || '');
+        setWebsite(ocrResult.website || '');
+        setRawAddress(ocrResult.raw_address || '');
+        setTags(ocrResult.tags ? ocrResult.tags.join(', ') : 'Verified Business');
+      } else {
+        // Fallback to backend extraction endpoint
+        const backendResult = await apiClient.scanCard('scanned-card.jpg', token);
+        if (backendResult) {
+          setExtractedData(backendResult);
+          setCompany(backendResult.company || '');
+          setPersonName(backendResult.person_name || '');
+          setDesignation(backendResult.designation || '');
+          setPhone(backendResult.phones?.[0]?.raw || '');
+          setEmail(backendResult.emails?.[0] || '');
+          setWebsite(backendResult.website || '');
+          setRawAddress(backendResult.raw_address || '');
+          setTags(backendResult.tags ? backendResult.tags.join(', ') : 'Business Card');
+        }
+      }
+    } catch (err) {
+      console.warn('OCR extraction error:', err);
+    } finally {
+      setIsScanning(false);
     }
-
-    setIsScanning(false);
   };
 
-  // Save Card to PostgreSQL Live Database
+  // Save Card to PostgreSQL Database
   const handleSaveToDatabase = async () => {
     if (!company && !personName && !phone) {
       alert('Please enter at least Company Name, Person Name, or Phone Number.');
@@ -278,26 +300,9 @@ export function ScanCardScreen({ onCardSaved }) {
         </View>
       ) : null}
 
-      {/* Header Info for Desktop */}
-      {isDesktop && (
-        <View style={styles.desktopBanner}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={styles.bannerIcon}>
-              <Camera size={20} color="#FFFFFF" />
-            </View>
-            <View>
-              <Text style={styles.desktopBannerTitle}>Digital Card Scanner & Vault</Text>
-              <Text style={styles.desktopBannerSub}>
-                Use your desktop webcam, drag & drop card images, or paste from clipboard (Ctrl+V)
-              </Text>
-            </View>
-          </View>
-        </View>
-      )}
-
       {/* Main Grid: Responsive Side-by-Side on Desktop, Stacked on Mobile */}
       <View style={[styles.mainLayout, isDesktop && styles.desktopLayoutGrid]}>
-        {/* LEFT COLUMN: Camera Viewfinder & File Dropzone */}
+        {/* LEFT COLUMN: Camera Viewfinder (Proper 3.5 : 2 Card Proportions) */}
         <View style={[styles.leftColumn, isDesktop && styles.desktopLeftColumn]}>
           <View
             style={[
@@ -324,13 +329,13 @@ export function ScanCardScreen({ onCardSaved }) {
               }}
             />
 
-            {/* 2. Captured / Uploaded Image View */}
+            {/* 2. Captured / Uploaded Image View (Full Preview) */}
             {selectedImage && !isCameraActive ? (
               <View style={styles.previewWrap}>
                 <img
                   src={selectedImage}
                   alt="Business Card"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 12 }}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8 }}
                 />
                 <TouchableOpacity
                   style={styles.reUploadBtn}
@@ -342,19 +347,19 @@ export function ScanCardScreen({ onCardSaved }) {
               </View>
             ) : null}
 
-            {/* 3. Empty Idle State with Drag-and-drop info */}
+            {/* 3. Empty Idle State with Card Alignment Guides */}
             {!selectedImage && !isCameraActive ? (
               <View style={styles.alignmentGuide}>
                 <View style={styles.cornerTL} />
                 <View style={styles.cornerTR} />
                 <View style={styles.cornerBL} />
                 <View style={styles.cornerBR} />
-                <Camera size={44} color="#64748B" />
+                <Camera size={38} color="#64748B" />
                 <Text style={styles.guideTitle}>
-                  {isDragging ? 'Drop Business Card Image Here' : 'Capture or Upload Business Card'}
+                  {isDragging ? 'Drop Card Image Here' : 'Point Camera at Business Card'}
                 </Text>
                 <Text style={styles.guideSub}>
-                  {cameraError || (isDesktop ? 'Drag & drop image file, paste (Ctrl+V), or open webcam' : 'Align card edges within the frame')}
+                  {cameraError || (isDesktop ? 'Webcam / Drag & Drop' : 'Fit card in 3.5 : 2 frame')}
                 </Text>
               </View>
             ) : null}
@@ -378,7 +383,7 @@ export function ScanCardScreen({ onCardSaved }) {
           ) : (
             <View style={styles.scanActionsRow}>
               <TouchableOpacity style={styles.openCameraBtn} onPress={() => startCamera()}>
-                <Camera size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Camera size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
                 <Text style={styles.openCameraBtnText}>
                   {isDesktop ? 'Open Desktop Webcam' : 'Open Live Camera'}
                 </Text>
@@ -388,7 +393,7 @@ export function ScanCardScreen({ onCardSaved }) {
                 style={styles.uploadFileBtn}
                 onPress={() => fileInputRef.current && fileInputRef.current.click()}
               >
-                <Upload size={18} color="#CBD5E1" style={{ marginRight: 8 }} />
+                <Upload size={16} color="#CBD5E1" style={{ marginRight: 8 }} />
                 <Text style={styles.uploadFileBtnText}>
                   {isDesktop ? 'Browse File / Drop Image' : 'Choose from Gallery / Files'}
                 </Text>
@@ -396,12 +401,12 @@ export function ScanCardScreen({ onCardSaved }) {
             </View>
           )}
 
-          {/* AI Extraction In-Progress Indicator */}
+          {/* Dynamic AI OCR Progress Indicator */}
           {isScanning && (
             <Card style={styles.scanningCard}>
               <Sparkles size={24} color={colors.primary} />
-              <Text style={styles.scanningTitle}>Extracting Card Details...</Text>
-              <Text style={styles.scanningDesc}>Detecting company, contacts, phone, WhatsApp & address into database fields</Text>
+              <Text style={styles.scanningTitle}>{scanStatusText}</Text>
+              <Text style={styles.scanningDesc}>Reading name, role, mobile, email, website and address dynamically from card</Text>
             </Card>
           )}
         </View>
@@ -412,9 +417,9 @@ export function ScanCardScreen({ onCardSaved }) {
             <View style={styles.extractedHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Sparkles size={18} color={colors.primary} style={{ marginRight: 6 }} />
-                <Text style={styles.extractedHeaderTitle}>CARD DETAILS (REVIEW & SAVE TO DATABASE)</Text>
+                <Text style={styles.extractedHeaderTitle}>CARD DETAILS (AUTO-FILLED & EDITABLE)</Text>
               </View>
-              <Badge type="verified" label="Live OCR" />
+              <Badge type="verified" label="Dynamic OCR" />
             </View>
 
             <Input
@@ -422,7 +427,7 @@ export function ScanCardScreen({ onCardSaved }) {
               value={company}
               onChangeText={setCompany}
               leftIcon={Building}
-              placeholder="e.g. Lipi Traders / Acme Corp"
+              placeholder="e.g. Real Estate / Enterprise Name"
             />
 
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -432,7 +437,7 @@ export function ScanCardScreen({ onCardSaved }) {
                   value={personName}
                   onChangeText={setPersonName}
                   leftIcon={User}
-                  placeholder="e.g. Sivakumar"
+                  placeholder="e.g. Olivia Wilson"
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -440,7 +445,7 @@ export function ScanCardScreen({ onCardSaved }) {
                   label="DESIGNATION"
                   value={designation}
                   onChangeText={setDesignation}
-                  placeholder="e.g. Managing Partner"
+                  placeholder="e.g. Real Estate Agent"
                 />
               </View>
             </View>
@@ -452,7 +457,7 @@ export function ScanCardScreen({ onCardSaved }) {
                   value={phone}
                   onChangeText={setPhone}
                   leftIcon={Phone}
-                  placeholder="+91 96555 87877"
+                  placeholder="+123-456-7890"
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -461,7 +466,7 @@ export function ScanCardScreen({ onCardSaved }) {
                   value={email}
                   onChangeText={setEmail}
                   leftIcon={Mail}
-                  placeholder="contact@company.com"
+                  placeholder="hello@company.com"
                 />
               </View>
             </View>
@@ -471,7 +476,7 @@ export function ScanCardScreen({ onCardSaved }) {
               value={website}
               onChangeText={setWebsite}
               leftIcon={Globe}
-              placeholder="https://company.com"
+              placeholder="www.company.com"
             />
 
             <Input
@@ -479,7 +484,7 @@ export function ScanCardScreen({ onCardSaved }) {
               value={rawAddress}
               onChangeText={setRawAddress}
               leftIcon={MapPin}
-              placeholder="Street, Area, City, State, Pincode"
+              placeholder="123 Anywhere St., Any City"
             />
 
             <Input
@@ -487,7 +492,7 @@ export function ScanCardScreen({ onCardSaved }) {
               value={tags}
               onChangeText={setTags}
               leftIcon={Tag}
-              placeholder="e.g. Supplier, Industrial, Coimbatore"
+              placeholder="e.g. Real Estate, Agent, Property"
             />
 
             <Button
@@ -511,34 +516,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A'
   },
   scrollContent: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl
-  },
-  desktopBanner: {
-    backgroundColor: '#1E293B',
-    borderRadius: radii.lg,
     padding: spacing.md,
-    marginBottom: spacing.lg,
-    borderWidth: 1,
-    borderColor: '#334155'
-  },
-  bannerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  desktopBannerTitle: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700'
-  },
-  desktopBannerSub: {
-    color: '#94A3B8',
-    fontSize: 13,
-    marginTop: 2
+    paddingBottom: spacing.xxxl
   },
   mainLayout: {
     flexDirection: 'column',
@@ -546,20 +525,18 @@ const styles = StyleSheet.create({
   },
   desktopLayoutGrid: {
     flexDirection: 'row',
-    gap: spacing.xl,
+    gap: spacing.lg,
     alignItems: 'flex-start'
   },
   leftColumn: {
     width: '100%'
   },
   desktopLeftColumn: {
-    flex: 1,
-    position: 'sticky',
-    top: 20
+    flex: 1
   },
   rightColumn: {
     width: '100%',
-    marginTop: spacing.md
+    marginTop: spacing.sm
   },
   desktopRightColumn: {
     flex: 1.2,
@@ -578,11 +555,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13
   },
+  // Compact Standard Business Card Aspect Ratio (1.75 : 1)
   viewfinderFrame: {
     width: '100%',
-    minHeight: 260,
+    height: 195,
+    maxHeight: 210,
     backgroundColor: '#1E293B',
-    borderRadius: radii.lg,
+    borderRadius: radii.md,
     borderWidth: 2,
     borderColor: '#334155',
     borderStyle: 'dashed',
@@ -592,7 +571,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   desktopViewfinderFrame: {
-    minHeight: 340
+    height: 240,
+    maxHeight: 260
   },
   viewfinderFrameDragging: {
     borderColor: colors.primary,
@@ -600,120 +580,120 @@ const styles = StyleSheet.create({
   },
   previewWrap: {
     width: '100%',
-    minHeight: 260,
+    height: '100%',
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    backgroundColor: '#0F172A'
+    padding: 6,
+    backgroundColor: '#0B1120'
   },
   reUploadBtn: {
     position: 'absolute',
-    bottom: 12,
+    bottom: 8,
     backgroundColor: 'rgba(15, 23, 42, 0.85)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: radii.md
   },
   reUploadText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700'
   },
   alignmentGuide: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg
+    paddingHorizontal: spacing.md
   },
   guideTitle: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    marginTop: spacing.md
+    marginTop: 8
   },
   guideSub: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
-    marginTop: 4
+    marginTop: 2
   },
   cornerTL: {
     position: 'absolute',
-    top: 16,
-    left: 16,
-    width: 24,
-    height: 24,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
+    top: 10,
+    left: 10,
+    width: 20,
+    height: 20,
+    borderTopWidth: 2.5,
+    borderLeftWidth: 2.5,
     borderColor: colors.primary
   },
   cornerTR: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 24,
-    height: 24,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
+    top: 10,
+    right: 10,
+    width: 20,
+    height: 20,
+    borderTopWidth: 2.5,
+    borderRightWidth: 2.5,
     borderColor: colors.primary
   },
   cornerBL: {
     position: 'absolute',
-    bottom: 16,
-    left: 16,
-    width: 24,
-    height: 24,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
+    bottom: 10,
+    left: 10,
+    width: 20,
+    height: 20,
+    borderBottomWidth: 2.5,
+    borderLeftWidth: 2.5,
     borderColor: colors.primary
   },
   cornerBR: {
     position: 'absolute',
-    bottom: 16,
-    right: 16,
-    width: 24,
-    height: 24,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
+    bottom: 10,
+    right: 10,
+    width: 20,
+    height: 20,
+    borderBottomWidth: 2.5,
+    borderRightWidth: 2.5,
     borderColor: colors.primary
   },
   cameraControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.xl,
-    marginTop: spacing.md
+    gap: spacing.lg,
+    marginTop: spacing.sm
   },
   captureCircleBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: 'transparent',
-    borderWidth: 4,
+    borderWidth: 3.5,
     borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center'
   },
   captureInnerCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#FFFFFF'
   },
   flipBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#334155',
     alignItems: 'center',
     justifyContent: 'center'
   },
   closeCameraBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#334155',
     alignItems: 'center',
     justifyContent: 'center'
@@ -721,20 +701,20 @@ const styles = StyleSheet.create({
   scanActionsRow: {
     width: '100%',
     flexDirection: 'column',
-    gap: spacing.xs,
-    marginTop: spacing.md
+    gap: 6,
+    marginTop: spacing.sm
   },
   openCameraBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: radii.md
   },
   openCameraBtnText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700'
   },
   uploadFileBtn: {
@@ -744,12 +724,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B',
     borderWidth: 1,
     borderColor: '#334155',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: radii.md
   },
   uploadFileBtnText: {
     color: '#CBD5E1',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600'
   },
   scanningCard: {
@@ -757,32 +737,32 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.xl,
-    marginTop: spacing.md
+    padding: spacing.lg,
+    marginTop: spacing.sm
   },
   scanningTitle: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
-    marginTop: spacing.md
+    marginTop: spacing.sm
   },
   scanningDesc: {
     color: '#94A3B8',
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
-    marginTop: 4
+    marginTop: 2
   },
   extractedCard: {
     backgroundColor: '#FFFFFF',
     borderColor: colors.border,
-    padding: spacing.lg,
-    borderRadius: radii.lg
+    padding: spacing.md,
+    borderRadius: radii.md
   },
   extractedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md
+    marginBottom: spacing.sm
   },
   extractedHeaderTitle: {
     fontSize: 11,
@@ -791,6 +771,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5
   },
   saveDbBtn: {
-    marginTop: spacing.md
+    marginTop: spacing.sm
   }
 });
