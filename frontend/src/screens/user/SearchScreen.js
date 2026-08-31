@@ -1,44 +1,100 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
-import { Search, SlidersHorizontal, MapPin, Building2, Phone, MessageSquare, Navigation, Check, BookmarkCheck, Sparkles } from 'lucide-react';
+import { Search, SlidersHorizontal, MapPin, Building2, Phone, MessageSquare, Navigation, Check, BookmarkCheck, BookmarkPlus, Sparkles } from 'lucide-react';
 import { colors, radii, spacing, typography, shadows } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { BrandSpinner, SkeletonCard } from '../../components/Loader';
-import { categories, mockBusinesses } from '../../data/mockData';
+import { categories as fallbackCategories, mockBusinesses } from '../../data/mockData';
 import { useAuth } from '../../context/AuthContext';
+import { apiClient } from '../../services/api';
 
 export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
-  const { isBusinessSaved, saveBusinessToVault } = useAuth();
+  const { isBusinessSaved, saveBusinessToVault, savedCards } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCat, setSelectedCat] = useState(initialCategoryId || 'all');
   const [selectedRadius, setSelectedRadius] = useState(10); // km
   const [gstOnly, setGstOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
+  const [isSearching, setIsSearching] = useState(true);
+  const [liveCategories, setLiveCategories] = useState(fallbackCategories);
+  const [businesses, setBusinesses] = useState(mockBusinesses);
 
   const radiusOptions = [2, 5, 10, 25];
 
-  const handleCategorySelect = (catId) => {
+  // Fetch dynamic categories and businesses from API
+  const loadDirectoryData = useCallback(async () => {
     setIsSearching(true);
-    setSelectedCat(catId);
-    setTimeout(() => {
+    try {
+      const [catsRes, bizRes] = await Promise.all([
+        apiClient.getCategories(),
+        apiClient.searchBusinesses({ q: searchQuery, category: selectedCat !== 'all' ? selectedCat : '', radius: selectedRadius })
+      ]);
+
+      if (catsRes && Array.isArray(catsRes) && catsRes.length > 0) {
+        setLiveCategories(catsRes);
+      }
+
+      let fetchedList = (bizRes && Array.isArray(bizRes) && bizRes.length > 0) ? bizRes : mockBusinesses;
+
+      // Also merge any cards saved in vault that are business cards
+      if (savedCards && savedCards.length > 0) {
+        const customVaultBiz = savedCards.map((card, idx) => ({
+          id: card.id || `vault-biz-${idx}`,
+          name: card.company || card.person_name || 'Business Contact',
+          slug: (card.company || card.person_name || 'biz').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          categoryId: 'manufacturing',
+          category: card.tags?.[0] || 'Business Services',
+          description: card.notes || `${card.person_name || 'Partner'} - ${card.designation || 'Business Executive'}`,
+          verification: 'gst',
+          distanceKm: 1.2,
+          pincode: '641049',
+          rating: card.private_rating || 5.0,
+          reviewCount: 12,
+          phone: card.phones?.[0]?.raw || card.phones?.[0]?.e164 || '+919655587877',
+          address: card.raw_address || 'Coimbatore, Tamil Nadu',
+          services: card.tags || ['Verified Business', 'Direct Contact']
+        }));
+
+        // Merge without duplicates by phone or name
+        const existingNames = new Set(fetchedList.map(b => (b.name || '').toLowerCase().trim()));
+        customVaultBiz.forEach(vb => {
+          const vName = (vb.name || '').toLowerCase().trim();
+          if (vName && !existingNames.has(vName)) {
+            existingNames.add(vName);
+            fetchedList = [vb, ...fetchedList];
+          }
+        });
+      }
+
+      setBusinesses(fetchedList);
+    } catch (e) {
+      console.warn('Error fetching directory:', e);
+    } finally {
       setIsSearching(false);
-    }, 250);
+    }
+  }, [searchQuery, selectedCat, selectedRadius, savedCards]);
+
+  useEffect(() => {
+    loadDirectoryData();
+  }, [loadDirectoryData]);
+
+  const handleCategorySelect = (catId) => {
+    setSelectedCat(catId);
   };
 
-  const filteredBusinesses = mockBusinesses.filter((biz) => {
-    if (selectedCat !== 'all' && biz.categoryId !== selectedCat) return false;
+  const filteredBusinesses = businesses.filter((biz) => {
+    if (selectedCat !== 'all' && biz.categoryId !== selectedCat && biz.category?.toLowerCase() !== selectedCat.toLowerCase()) return false;
     if (gstOnly && biz.verification !== 'gst') return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchName = biz.name.toLowerCase().includes(q);
-      const matchDesc = biz.description.toLowerCase().includes(q);
-      const matchCat = biz.category.toLowerCase().includes(q);
-      const matchPincode = biz.pincode.includes(q);
-      const matchServices = biz.services.some((s) => s.toLowerCase().includes(q));
+      const matchName = (biz.name || '').toLowerCase().includes(q);
+      const matchDesc = (biz.description || '').toLowerCase().includes(q);
+      const matchCat = (biz.category || '').toLowerCase().includes(q);
+      const matchPincode = (biz.pincode || '').includes(q);
+      const matchServices = Array.isArray(biz.services) && biz.services.some((s) => s.toLowerCase().includes(q));
       if (!matchName && !matchDesc && !matchCat && !matchPincode && !matchServices) {
         return false;
       }
@@ -55,7 +111,7 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search by name, service, or pincode..."
+            placeholder="Search businesses, services, pincodes..."
             placeholderTextColor={colors.textMuted}
             style={styles.input}
             autoFocus={false}
@@ -78,8 +134,8 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
             {radiusOptions.map((r) => (
               <TouchableOpacity
                 key={r}
+                style={[styles.radiusBtn, selectedRadius === r && styles.radiusBtnActive]}
                 onPress={() => setSelectedRadius(r)}
-                style={[styles.radiusChip, selectedRadius === r && styles.radiusChipActive]}
               >
                 <Text style={[styles.radiusText, selectedRadius === r && styles.radiusTextActive]}>
                   {r} km
@@ -111,13 +167,13 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
               All Categories
             </Text>
           </TouchableOpacity>
-          {categories.map((c) => (
+          {liveCategories.map((c) => (
             <TouchableOpacity
-              key={c.id}
-              style={[styles.catChip, selectedCat === c.id && styles.catChipActive]}
-              onPress={() => handleCategorySelect(c.id)}
+              key={c.id || c.slug}
+              style={[styles.catChip, selectedCat === (c.id || c.slug) && styles.catChipActive]}
+              onPress={() => handleCategorySelect(c.id || c.slug)}
             >
-              <Text style={[styles.catChipText, selectedCat === c.id && styles.catChipTextActive]}>
+              <Text style={[styles.catChipText, selectedCat === (c.id || c.slug) && styles.catChipTextActive]}>
                 {c.name}
               </Text>
             </TouchableOpacity>
@@ -129,13 +185,13 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
       <ScrollView contentContainerStyle={styles.resultsScroll} showsVerticalScrollIndicator={false}>
         <View style={styles.resultsMetaRow}>
           <Text style={styles.resultsCount}>
-            {isSearching ? 'Filtering businesses...' : `${filteredBusinesses.length} verified businesses found`}
+            {isSearching ? 'Filtering directory...' : `${filteredBusinesses.length} verified businesses found`}
           </Text>
         </View>
 
         {isSearching ? (
           <View style={styles.loadingWrapper}>
-            <BrandSpinner size={28} text="Searching directory..." />
+            <BrandSpinner size={28} text="Loading dynamic directory..." />
             <SkeletonCard count={3} />
           </View>
         ) : filteredBusinesses.length === 0 ? (
@@ -169,10 +225,10 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
                   </View>
                   <View style={{ flex: 1, paddingRight: isSaved ? 70 : 0 }}>
                     <Text style={styles.bizName}>{biz.name}</Text>
-                    <Text style={styles.bizCat}>{biz.category} • {biz.distanceKm} km</Text>
+                    <Text style={styles.bizCat}>{biz.category} • {biz.distanceKm || 1.5} km</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                       <Badge type="gst" label="GST Verified" />
-                      <Text style={styles.pincode}>Pin: {biz.pincode}</Text>
+                      <Text style={styles.pincode}>Pin: {biz.pincode || '641004'}</Text>
                     </View>
                   </View>
                 </View>
@@ -181,7 +237,7 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
 
                 {/* Service tags */}
                 <View style={styles.serviceChipsRow}>
-                  {biz.services.slice(0, 3).map((s, idx) => (
+                  {(biz.services || ['CNC Machining', 'Fabrication']).slice(0, 3).map((s, idx) => (
                     <View key={idx} style={styles.serviceChip}>
                       <Text style={styles.serviceText}>{s}</Text>
                     </View>
@@ -194,19 +250,44 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
                     <Phone size={14} color={colors.primary} />
                     <Text style={styles.btnActionText}>Call</Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
                     style={[styles.btnAction, { backgroundColor: '#ECFDF5' }]}
-                    onPress={() => window.open(`https://wa.me/${biz.phone}`)}
+                    onPress={() => window.open(`https://wa.me/${(biz.phone || '').replace(/[^0-9]/g, '')}`)}
                   >
                     <MessageSquare size={14} color={colors.verifiedGst} />
                     <Text style={[styles.btnActionText, { color: colors.verifiedGst }]}>WhatsApp</Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
                     style={styles.btnAction}
-                    onPress={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(biz.address)}`)}
+                    onPress={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(biz.address || biz.name)}`)}
                   >
                     <Navigation size={14} color={colors.textSecondary} />
                     <Text style={[styles.btnActionText, { color: colors.textSecondary }]}>Directions</Text>
+                  </TouchableOpacity>
+
+                  {/* 1-Tap Save to Vault Button */}
+                  <TouchableOpacity
+                    style={[styles.btnAction, isSaved ? styles.btnActionSaved : styles.btnActionSave]}
+                    onPress={async (e) => {
+                      e.stopPropagation();
+                      if (!isSaved) {
+                        await saveBusinessToVault(biz);
+                      }
+                    }}
+                  >
+                    {isSaved ? (
+                      <>
+                        <BookmarkCheck size={14} color="#059669" />
+                        <Text style={[styles.btnActionText, { color: '#059669', fontWeight: '700' }]}>Saved</Text>
+                      </>
+                    ) : (
+                      <>
+                        <BookmarkPlus size={14} color={colors.primary} />
+                        <Text style={[styles.btnActionText, { color: colors.primary, fontWeight: '700' }]}>Save</Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
               </Card>
@@ -261,38 +342,40 @@ const styles = StyleSheet.create({
   },
   filterPanel: {
     backgroundColor: '#FFFFFF',
-    padding: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border
   },
   filterSectionTitle: {
-    fontSize: 12,
+    ...typography.caption,
     fontWeight: '700',
     color: colors.textSecondary,
     marginBottom: spacing.xs,
-    textTransform: 'uppercase'
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
   },
   radiusRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
     marginBottom: spacing.md
   },
-  radiusChip: {
+  radiusBtn: {
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    paddingHorizontal: 12,
     borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.border,
+    marginRight: spacing.sm,
     backgroundColor: '#FFFFFF'
   },
-  radiusChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight
+  radiusBtnActive: {
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary
   },
   radiusText: {
     fontSize: 12,
-    color: colors.textSecondary,
-    fontWeight: '600'
+    fontWeight: '600',
+    color: colors.textSecondary
   },
   radiusTextActive: {
     color: colors.primary,
@@ -300,8 +383,7 @@ const styles = StyleSheet.create({
   },
   gstToggleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.xs
+    alignItems: 'center'
   },
   checkbox: {
     width: 20,
@@ -309,9 +391,9 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1.5,
     borderColor: colors.border,
+    marginRight: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.sm,
     backgroundColor: '#FFFFFF'
   },
   checkboxChecked: {
@@ -321,28 +403,28 @@ const styles = StyleSheet.create({
   gstToggleLabel: {
     fontSize: 13,
     color: colors.textPrimary,
-    fontWeight: '600'
+    fontWeight: '500'
   },
   catChipsWrapper: {
     backgroundColor: '#FFFFFF',
+    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border
   },
   catChipsScroll: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.xs
+    paddingHorizontal: spacing.lg
   },
   catChip: {
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    paddingHorizontal: 12,
     borderRadius: radii.full,
     backgroundColor: colors.bgMuted,
+    marginRight: spacing.xs,
     borderWidth: 1,
     borderColor: 'transparent'
   },
   catChipActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryLight,
     borderColor: colors.primary
   },
   catChipText: {
@@ -351,56 +433,57 @@ const styles = StyleSheet.create({
     color: colors.textSecondary
   },
   catChipTextActive: {
-    color: '#FFFFFF'
+    color: colors.primary,
+    fontWeight: '700'
   },
   resultsScroll: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxxl
+    padding: spacing.lg,
+    paddingBottom: 40
   },
   resultsMetaRow: {
-    marginBottom: spacing.sm
+    marginBottom: spacing.md
   },
   resultsCount: {
-    fontSize: 13,
+    ...typography.caption,
     fontWeight: '600',
     color: colors.textSecondary
   },
   loadingWrapper: {
-    width: '100%',
-    alignItems: 'center'
+    paddingVertical: spacing.md
   },
   bizCard: {
     marginBottom: spacing.md,
+    padding: spacing.md,
     position: 'relative'
   },
   savedChip: {
     position: 'absolute',
-    top: 14,
-    right: 14,
+    top: spacing.md,
+    right: spacing.md,
+    backgroundColor: '#D1FAE5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+    borderRadius: radii.full,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.full,
+    paddingVertical: 3,
     zIndex: 10
   },
   savedChipText: {
-    color: '#059669',
     fontSize: 10,
     fontWeight: '800',
+    color: '#065F46',
     letterSpacing: 0.5
   },
   bizHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.xs
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm
   },
   bizLogo: {
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
     borderRadius: radii.md,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
@@ -408,14 +491,14 @@ const styles = StyleSheet.create({
     marginRight: spacing.md
   },
   bizName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: colors.textPrimary
+    color: colors.textPrimary,
+    marginBottom: 2
   },
   bizCat: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 1
+    ...typography.caption,
+    color: colors.textSecondary
   },
   pincode: {
     fontSize: 11,
@@ -423,22 +506,23 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm
   },
   bizDesc: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
     lineHeight: 18,
-    marginVertical: spacing.xs
+    marginBottom: spacing.sm
   },
   serviceChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginVertical: spacing.xs
+    marginBottom: spacing.md
   },
   serviceChip: {
     backgroundColor: colors.bgMuted,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: radii.sm
+    borderRadius: radii.sm,
+    marginRight: 6,
+    marginBottom: 4
   },
   serviceText: {
     fontSize: 11,
@@ -446,25 +530,36 @@ const styles = StyleSheet.create({
   },
   bizActions: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: spacing.sm
+    paddingTop: spacing.sm,
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
   btnAction: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.primaryLight,
-    paddingVertical: 8,
-    borderRadius: radii.md,
-    gap: 4
+    paddingVertical: 7,
+    borderRadius: radii.sm,
+    backgroundColor: colors.bgMuted,
+    marginHorizontal: 3
+  },
+  btnActionSave: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE'
+  },
+  btnActionSaved: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0'
   },
   btnActionText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary
+    fontWeight: '600',
+    color: colors.primary,
+    marginLeft: 4
   }
 });
