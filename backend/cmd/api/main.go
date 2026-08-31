@@ -130,6 +130,7 @@ func main() {
 		r.Get("/businesses/search", discoveryHandler.SearchBusinesses)
 		r.Get("/businesses/{id}", discoveryHandler.GetBusiness)
 		r.Get("/businesses/slug/{slug}", discoveryHandler.GetBusinessBySlug)
+		r.Post("/cards/scan", cardHandler.ScanCard)
 
 		// 3. User Account Endpoints (Protected)
 		r.Group(func(r chi.Router) {

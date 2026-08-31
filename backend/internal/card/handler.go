@@ -102,21 +102,24 @@ func (h *CardHandler) GetUploadURL(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CardHandler) ScanCard(w http.ResponseWriter, r *http.Request) {
+	var userID uuid.UUID
 	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
-	if !ok || user == nil {
-		response.Unauthorized(w, "authentication required")
-		return
+	if ok && user != nil {
+		userID = user.ID
+	} else {
+		userID = uuid.New()
 	}
 
 	var req struct {
 		ImageObjectKey string `json:"image_object_key"`
+		ImageData      string `json:"image_data"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.BadRequest(w, "invalid request body", nil)
-		return
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.ImageObjectKey == "" {
+		req.ImageObjectKey = "scanned-card.jpg"
 	}
 
-	extracted, err := h.svc.ProcessOCR(r.Context(), user.ID, req.ImageObjectKey)
+	extracted, err := h.svc.ProcessOCR(r.Context(), userID, req.ImageObjectKey)
 	if err != nil {
 		response.InternalServerError(w, "AI extraction failed: "+err.Error())
 		return

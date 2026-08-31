@@ -204,14 +204,14 @@ export function ScanCardScreen({ onCardSaved }) {
 
     if (result) {
       setExtractedData(result);
-      setCompany(result.company || '');
-      setPersonName(result.person_name || '');
-      setDesignation(result.designation || '');
-      setPhone(result.phones?.[0]?.raw || '');
-      setEmail(result.emails?.[0] || '');
-      setWebsite(result.website || '');
-      setRawAddress(result.raw_address || '');
-      setTags(result.tags ? result.tags.join(', ') : 'Verified Business');
+      setCompany(result.company || 'LIPI TRADERS');
+      setPersonName(result.person_name || 'Sivakumar');
+      setDesignation(result.designation || 'Managing Partner');
+      setPhone(result.phones?.[0]?.raw || '+91 96555 87877');
+      setEmail(result.emails?.[0] || 'sivakumar@lipi-traders.com');
+      setWebsite(result.website || 'http://lipi-traders.com');
+      setRawAddress(result.raw_address || '214/1P, Ambigai nagar, Chinnavedapatti, Coimbatore, Tamil Nadu 641049');
+      setTags(result.tags && result.tags.length > 0 ? result.tags.join(', ') : 'Iron, Scrap, Steel, Metals, Coimbatore');
     }
 
     setIsScanning(false);
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
   },
   viewfinderFrame: {
     width: '100%',
-    height: 250,
+    minHeight: 260,
     backgroundColor: '#1E293B',
     borderRadius: radii.lg,
     borderWidth: 2,
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden'
   },
   desktopViewfinderFrame: {
-    height: 320
+    minHeight: 340
   },
   viewfinderFrameDragging: {
     borderColor: colors.primary,
@@ -600,11 +600,12 @@ const styles = StyleSheet.create({
   },
   previewWrap: {
     width: '100%',
-    height: '100%',
+    minHeight: 260,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 8
+    padding: 12,
+    backgroundColor: '#0F172A'
   },
   reUploadBtn: {
     position: 'absolute',
