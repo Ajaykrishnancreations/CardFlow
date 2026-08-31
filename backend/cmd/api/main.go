@@ -196,12 +196,11 @@ func main() {
 				return
 			}
 			// Otherwise serve index.html for React SPA client-side routing
-			indexFile, err := subFS.Open("index.html")
+			indexData, err := fs.ReadFile(subFS, "index.html")
 			if err == nil {
-				defer indexFile.Close()
-				http.ServeContent(w, req, "index.html", time.Now(), indexFile.(interface {
-					ReadSeeker()
-				}).(ioReadSeeker))
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(indexData)
 			} else {
 				fileServer.ServeHTTP(w, req)
 			}
