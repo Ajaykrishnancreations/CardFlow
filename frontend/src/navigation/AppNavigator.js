@@ -280,6 +280,11 @@ export function AppNavigator() {
           showLocation={currentTab === 'user_home'}
           showBack={!!selectedBusiness || history.length > 0}
           onBack={handleBack}
+          currentTab={currentTab}
+          onSelectTab={(tabId) => {
+            setSelectedBusiness(null);
+            navigateTo(tabId);
+          }}
         />
       }
       footer={

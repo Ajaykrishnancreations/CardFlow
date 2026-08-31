@@ -1,6 +1,26 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowLeft, MapPin, Bell, Shield, Briefcase, UserCheck, LogOut } from 'lucide-react';
+import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import {
+  ArrowLeft,
+  MapPin,
+  Shield,
+  Briefcase,
+  UserCheck,
+  LogOut,
+  Sparkles,
+  Home,
+  Search,
+  Camera,
+  FolderOpen,
+  User,
+  LayoutDashboard,
+  Building2,
+  Inbox,
+  BarChart3,
+  Users,
+  ShieldAlert,
+  Settings
+} from 'lucide-react';
 import { colors, radii, spacing, typography } from '../theme';
 import { useAuth } from '../context/AuthContext';
 
@@ -11,9 +31,13 @@ export function Header({
   onBack,
   rightAction,
   showLocation = false,
-  locationText = 'Coimbatore, TN'
+  locationText = 'Coimbatore, TN',
+  currentTab,
+  onSelectTab
 }) {
   const { user, role, logout } = useAuth();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
   const getRoleBadge = () => {
     if (role === 'admin') {
@@ -40,19 +64,68 @@ export function Header({
     };
   };
 
+  const getDesktopNavLinks = () => {
+    if (!user || !onSelectTab) return [];
+
+    if (role === 'admin') {
+      return [
+        { id: 'admin_dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'admin_users', label: 'Users & Grants', icon: Users },
+        { id: 'admin_businesses', label: 'Directory', icon: Building2 },
+        { id: 'admin_kyc', label: 'KYC Queue', icon: ShieldAlert },
+        { id: 'admin_settings', label: 'Settings', icon: Settings }
+      ];
+    }
+
+    if (role === 'owner') {
+      return [
+        { id: 'owner_dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'owner_businesses', label: 'My Businesses', icon: Building2 },
+        { id: 'owner_enquiries', label: 'Enquiries', icon: Inbox },
+        { id: 'owner_analytics', label: 'Analytics', icon: BarChart3 },
+        { id: 'owner_profile', label: 'Profile', icon: User }
+      ];
+    }
+
+    return [
+      { id: 'user_home', label: 'Explore', icon: Home },
+      { id: 'user_search', label: 'Directory Search', icon: Search },
+      { id: 'user_scan', label: 'Scan Card', icon: Camera, isPrimary: true },
+      { id: 'user_vault', label: 'Saved Cards Vault', icon: FolderOpen },
+      { id: 'user_profile', label: 'Profile', icon: User }
+    ];
+  };
+
   const roleConfig = getRoleBadge();
   const RoleIcon = roleConfig.Icon;
+  const desktopLinks = getDesktopNavLinks();
 
   return (
-    <View style={styles.header}>
-      <View style={styles.topRow}>
+    <View style={[styles.header, isDesktop && styles.desktopHeader]}>
+      <View style={[styles.innerContainer, isDesktop && styles.desktopInnerContainer]}>
+        {/* Left: Branding or Title */}
         <View style={styles.leftContainer}>
           {showBack && (
             <TouchableOpacity onPress={onBack} style={styles.backButton} activeOpacity={0.7}>
-              <ArrowLeft size={20} color={colors.textPrimary} />
+              <ArrowLeft size={20} color="#FFFFFF" />
             </TouchableOpacity>
           )}
-          {showLocation ? (
+
+          {isDesktop ? (
+            <TouchableOpacity
+              onPress={() => onSelectTab && onSelectTab(role === 'admin' ? 'admin_dashboard' : role === 'owner' ? 'owner_dashboard' : 'user_home')}
+              style={styles.desktopLogoRow}
+              activeOpacity={0.8}
+            >
+              <View style={styles.logoBadge}>
+                <Sparkles size={16} color="#FFFFFF" />
+              </View>
+              <View>
+                <Text style={styles.brandTitle}>CardFlow</Text>
+                <Text style={styles.brandSubtitle}>Business Card & Discovery Platform</Text>
+              </View>
+            </TouchableOpacity>
+          ) : showLocation ? (
             <View style={styles.locationChip}>
               <MapPin size={14} color={colors.primary} style={{ marginRight: 4 }} />
               <Text style={styles.locationText}>{locationText}</Text>
@@ -65,18 +138,60 @@ export function Header({
           )}
         </View>
 
+        {/* Center: Desktop Navigation Bar Links */}
+        {isDesktop && desktopLinks.length > 0 && (
+          <View style={styles.desktopNavList}>
+            {desktopLinks.map((link) => {
+              const IconComp = link.icon;
+              const isActive = currentTab === link.id;
+
+              if (link.isPrimary) {
+                return (
+                  <TouchableOpacity
+                    key={link.id}
+                    onPress={() => onSelectTab(link.id)}
+                    style={[styles.desktopPrimaryNavBtn, isActive && styles.desktopPrimaryNavBtnActive]}
+                    activeOpacity={0.8}
+                  >
+                    <IconComp size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.desktopPrimaryNavText}>{link.label}</Text>
+                  </TouchableOpacity>
+                );
+              }
+
+              return (
+                <TouchableOpacity
+                  key={link.id}
+                  onPress={() => onSelectTab(link.id)}
+                  style={[styles.desktopNavItem, isActive && styles.desktopNavItemActive]}
+                  activeOpacity={0.7}
+                >
+                  <IconComp size={16} color={isActive ? colors.primary : '#94A3B8'} style={{ marginRight: 6 }} />
+                  <Text style={[styles.desktopNavText, isActive && styles.desktopNavTextActive]}>
+                    {link.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Right: User Status & Actions */}
         <View style={styles.rightContainer}>
           {user && (
             <View style={[styles.roleBadge, { backgroundColor: roleConfig.bg }]}>
               <RoleIcon size={12} color={roleConfig.color} style={{ marginRight: 4 }} />
-              <Text style={[styles.roleText, { color: roleConfig.color }]}>{roleConfig.label}</Text>
+              <Text style={[styles.roleText, { color: roleConfig.color }]}>
+                {isDesktop && user.name ? `${user.name} (${roleConfig.label})` : roleConfig.label}
+              </Text>
             </View>
           )}
           {rightAction ? (
             rightAction
           ) : user ? (
-            <TouchableOpacity onPress={logout} title="Logout" style={styles.iconButton} activeOpacity={0.7}>
-              <LogOut size={18} color={colors.textSecondary} />
+            <TouchableOpacity onPress={logout} title="Sign Out" style={styles.logoutBtn} activeOpacity={0.7}>
+              <LogOut size={16} color="#94A3B8" />
+              {isDesktop && <Text style={styles.logoutBtnText}>Sign Out</Text>}
             </TouchableOpacity>
           ) : null}
         </View>
@@ -87,70 +202,155 @@ export function Header({
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#0F172A',
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: '#1E293B',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    zIndex: 10
+    zIndex: 20
   },
-  topRow: {
+  desktopHeader: {
+    paddingVertical: spacing.sm,
+    backgroundColor: '#0F172A',
+    borderBottomColor: '#1E293B',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+  },
+  innerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    width: '100%'
+  },
+  desktopInnerContainer: {
+    maxWidth: 1280,
+    alignSelf: 'center'
   },
   leftContainer: {
     flexDirection: 'row',
+    alignItems: 'center'
+  },
+  desktopLogoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    flex: 1
+    gap: spacing.sm
+  },
+  logoBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.md,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  brandTitle: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.5
+  },
+  brandSubtitle: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '500'
   },
   backButton: {
     padding: spacing.xs,
     marginRight: spacing.sm,
-    borderRadius: radii.sm
+    borderRadius: radii.sm,
+    backgroundColor: '#1E293B'
   },
   title: {
     ...typography.titleSmall,
-    color: colors.textPrimary
+    color: '#FFFFFF'
   },
   subtitle: {
     ...typography.caption,
-    color: colors.textSecondary
+    color: '#94A3B8'
   },
   locationChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primaryLight,
-    paddingVertical: 5,
+    backgroundColor: '#1E293B',
     paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
     borderRadius: radii.full
   },
   locationText: {
-    fontSize: 13,
+    ...typography.bodySmall,
     fontWeight: '600',
-    color: colors.primaryDark
+    color: '#E2E8F0'
+  },
+  desktopNavList: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs
+  },
+  desktopNavItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: 'transparent'
+  },
+  desktopNavItemActive: {
+    backgroundColor: '#1E293B'
+  },
+  desktopNavText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '600'
+  },
+  desktopNavTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700'
+  },
+  desktopPrimaryNavBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    marginLeft: spacing.xs
+  },
+  desktopPrimaryNavBtnActive: {
+    backgroundColor: colors.primaryDark
+  },
+  desktopPrimaryNavText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700'
   },
   rightContainer: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    gap: spacing.sm
   },
   roleBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
     paddingHorizontal: spacing.sm,
-    borderRadius: radii.full,
-    marginRight: spacing.sm
+    paddingVertical: 4,
+    borderRadius: radii.full
   },
   roleText: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '700',
     letterSpacing: 0.5
   },
-  iconButton: {
-    padding: spacing.xs,
-    borderRadius: radii.full,
-    backgroundColor: colors.bgMuted,
-    marginLeft: spacing.xs
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radii.md,
+    backgroundColor: '#1E293B',
+    gap: 6
+  },
+  logoutBtnText: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    fontWeight: '600'
   }
 });

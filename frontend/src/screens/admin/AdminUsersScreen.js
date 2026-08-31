@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Modal, useWindowDimensions } from 'react-native';
 import { Users, Search, ShieldCheck, UserCheck, Plus, Gift, Check, X, Building, Phone, Calendar } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
+import { apiClient } from '../../services/api';
 
 const initialUsers = [
   { id: 'usr-ajay', name: 'Ajay', phone: '6382124970', role: 'admin', plan: 'premium', accessPeriod: 'Lifetime Admin Access', city: 'Coimbatore', isIdVerified: true, status: 'active' },
@@ -19,6 +20,8 @@ const initialUsers = [
 ];
 
 export function AdminUsersScreen() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 860;
   const [users, setUsers] = useState(initialUsers);
   const [search, setSearch] = useState('');
   
@@ -148,48 +151,50 @@ export function AdminUsersScreen() {
         />
       </View>
 
-      {filtered.map((u) => (
-        <Card key={u.id} style={styles.userCard}>
-          <View style={styles.userRow}>
-            <View style={[styles.avatar, u.role === 'admin' ? styles.avatarAdmin : u.role === 'owner' ? styles.avatarOwner : styles.avatarUser]}>
-              <Text style={styles.avatarText}>{u.name[0]}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.userName}>{u.name}</Text>
-                  {u.isIdVerified && <Badge type="id" label="Verified" style={{ marginLeft: 6 }} />}
-                </View>
-
-                {/* Grant Access Action Button for Non-Admins */}
-                {u.role !== 'admin' && (
-                  <TouchableOpacity
-                    style={styles.grantBtn}
-                    onPress={() => setSelectedUserForGrant(u)}
-                  >
-                    <Gift size={12} color={colors.primary} style={{ marginRight: 3 }} />
-                    <Text style={styles.grantBtnText}>Grant Access</Text>
-                  </TouchableOpacity>
-                )}
+      <View style={[styles.usersListContainer, isDesktop && styles.desktopUsersGrid]}>
+        {filtered.map((u) => (
+          <Card key={u.id} style={[styles.userCard, isDesktop && styles.desktopUserCard]}>
+            <View style={styles.userRow}>
+              <View style={[styles.avatar, u.role === 'admin' ? styles.avatarAdmin : u.role === 'owner' ? styles.avatarOwner : styles.avatarUser]}>
+                <Text style={styles.avatarText}>{u.name[0]}</Text>
               </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.userName}>{u.name}</Text>
+                    {u.isIdVerified && <Badge type="id" label="Verified" style={{ marginLeft: 6 }} />}
+                  </View>
 
-              <Text style={styles.phoneText}>+91 {u.phone} • {u.city}</Text>
-              {u.businessName ? (
-                <Text style={styles.bizText}>🏢 {u.businessName}</Text>
-              ) : null}
-
-              <View style={styles.tagsRow}>
-                <View style={[styles.roleChip, u.role === 'admin' ? styles.roleAdmin : u.role === 'owner' ? styles.roleOwner : styles.roleUser]}>
-                  <Text style={styles.roleChipText}>{u.role.toUpperCase()}</Text>
+                  {/* Grant Access Action Button for Non-Admins */}
+                  {u.role !== 'admin' && (
+                    <TouchableOpacity
+                      style={styles.grantBtn}
+                      onPress={() => setSelectedUserForGrant(u)}
+                    >
+                      <Gift size={12} color={colors.primary} style={{ marginRight: 3 }} />
+                      <Text style={styles.grantBtnText}>Grant Access</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-                <View style={styles.planChip}>
-                  <Text style={styles.planChipText}>{u.accessPeriod}</Text>
+
+                <Text style={styles.phoneText}>+91 {u.phone} • {u.city}</Text>
+                {u.businessName ? (
+                  <Text style={styles.bizText}>🏢 {u.businessName}</Text>
+                ) : null}
+
+                <View style={styles.tagsRow}>
+                  <View style={[styles.roleChip, u.role === 'admin' ? styles.roleAdmin : u.role === 'owner' ? styles.roleOwner : styles.roleUser]}>
+                    <Text style={styles.roleChipText}>{u.role.toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.planChip}>
+                    <Text style={styles.planChipText}>{u.accessPeriod}</Text>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
-        </Card>
-      ))}
+          </Card>
+        ))}
+      </View>
 
       {/* MODAL 1: GRANT FREE ACCESS */}
       {selectedUserForGrant && (
@@ -408,9 +413,22 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     outlineStyle: 'none'
   },
+  usersListContainer: {
+    flexDirection: 'column',
+    width: '100%'
+  },
+  desktopUsersGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md
+  },
   userCard: {
     marginBottom: spacing.sm,
     padding: spacing.md
+  },
+  desktopUserCard: {
+    width: 'calc(50% - 8px)',
+    marginBottom: 0
   },
   userRow: {
     flexDirection: 'row',

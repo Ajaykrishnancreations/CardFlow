@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native';
 import {
   FolderOpen,
   Search,
@@ -25,18 +25,20 @@ import { apiClient } from '../../services/api';
 
 export function SavedCardsScreen({ onScanNewCard }) {
   const { token } = useAuth();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 860;
+
   const [cards, setCards] = useState(mockSavedCards);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
 
-  const allTags = ['all', 'BNI Chapter', 'CA / Finance', 'Supplier', 'Vendor', 'CODISSIA', 'Metals', 'Scrap'];
+  const allTags = ['all', 'BNI Chapter', 'CA / Finance', 'Supplier', 'Vendor', 'CODISSIA', 'Metals', 'Scrap', 'Verified'];
 
   const loadCards = async () => {
     setIsLoading(true);
     const liveCards = await apiClient.getCards(token);
     if (liveCards && liveCards.length > 0) {
-      // Normalize live backend cards to screen format
       const formatted = liveCards.map((c) => ({
         id: c.id,
         personName: c.person_name || 'Business Contact',
@@ -88,7 +90,7 @@ export function SavedCardsScreen({ onScanNewCard }) {
   return (
     <View style={styles.container}>
       {/* Top Search & Actions */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, isDesktop && styles.desktopTopBar]}>
         <View style={styles.searchWrap}>
           <Search size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
           <TextInput
@@ -99,13 +101,25 @@ export function SavedCardsScreen({ onScanNewCard }) {
             style={styles.input}
           />
         </View>
-        <Button
-          title="Scan"
-          onPress={onScanNewCard}
-          icon={Plus}
-          size="sm"
-          style={styles.scanBtn}
-        />
+
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          {isDesktop && (
+            <Button
+              title="Export CSV"
+              onPress={handleExportCsv}
+              icon={FileSpreadsheet}
+              variant="outline"
+              size="sm"
+            />
+          )}
+          <Button
+            title="Scan Card"
+            onPress={onScanNewCard}
+            icon={Plus}
+            size="sm"
+            style={styles.scanBtn}
+          />
+        </View>
       </View>
 
       {/* Tag Filters */}
@@ -130,8 +144,8 @@ export function SavedCardsScreen({ onScanNewCard }) {
         </ScrollView>
       </View>
 
-      {/* Cards List */}
-      <ScrollView contentContainerStyle={styles.cardsScroll} showsVerticalScrollIndicator={false}>
+      {/* Cards List Grid (Multi-column on Desktop, Single Column on Mobile) */}
+      <ScrollView contentContainerStyle={[styles.cardsScroll, isDesktop && styles.desktopCardsScroll]} showsVerticalScrollIndicator={false}>
         {filteredCards.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
@@ -141,92 +155,94 @@ export function SavedCardsScreen({ onScanNewCard }) {
             onAction={onScanNewCard}
           />
         ) : (
-          filteredCards.map((card) => (
-            <Card key={card.id} style={styles.cardItem}>
-              {/* Card Header: Person & Company */}
-              <View style={styles.cardHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.personName}>{card.personName}</Text>
-                  <Text style={styles.designation}>{card.designation}</Text>
-                  <Text style={styles.companyName}>{card.company}</Text>
+          <View style={[styles.cardsGrid, isDesktop && styles.desktopCardsGrid]}>
+            {filteredCards.map((card) => (
+              <Card key={card.id} style={[styles.cardItem, isDesktop && styles.desktopCardItem]}>
+                {/* Card Header: Person & Company */}
+                <View style={styles.cardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.personName}>{card.personName}</Text>
+                    <Text style={styles.designation}>{card.designation}</Text>
+                    <Text style={styles.companyName}>{card.company}</Text>
+                  </View>
+                  <View style={styles.ratingBadge}>
+                    <Star size={14} color={colors.warning} fill={colors.warning} />
+                    <Text style={styles.ratingText}>{card.privateRating || 5}</Text>
+                  </View>
                 </View>
-                <View style={styles.ratingBadge}>
-                  <Star size={14} color={colors.warning} fill={colors.warning} />
-                  <Text style={styles.ratingText}>{card.privateRating || 5}</Text>
-                </View>
-              </View>
 
-              {/* Contact Information */}
-              <View style={styles.contactDetails}>
-                {card.phones && card.phones[0] && (
-                  <View style={styles.contactRow}>
-                    <Phone size={14} color={colors.primary} style={styles.contactIcon} />
-                    <Text style={styles.contactText}>{card.phones[0].raw}</Text>
-                    {card.phones[0].isWhatsapp && (
-                      <View style={styles.whatsappChip}>
-                        <Text style={styles.whatsappText}>WhatsApp</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {card.emails && card.emails[0] && (
-                  <View style={styles.contactRow}>
-                    <Mail size={14} color={colors.textSecondary} style={styles.contactIcon} />
-                    <Text style={styles.contactText}>{card.emails[0]}</Text>
-                  </View>
-                )}
-
-                {card.rawAddress && (
-                  <View style={styles.contactRow}>
-                    <MapPin size={14} color={colors.textSecondary} style={styles.contactIcon} />
-                    <Text style={styles.contactText} numberOfLines={1}>
-                      {card.rawAddress}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Tags */}
-              {card.tags && card.tags.length > 0 && (
-                <View style={styles.cardTagsRow}>
-                  {card.tags.map((t, idx) => (
-                    <View key={idx} style={styles.tagChip}>
-                      <Text style={styles.tagText}>{t}</Text>
+                {/* Contact Information */}
+                <View style={styles.contactDetails}>
+                  {card.phones && card.phones[0] && (
+                    <View style={styles.contactRow}>
+                      <Phone size={14} color={colors.primary} style={styles.contactIcon} />
+                      <Text style={styles.contactText}>{card.phones[0].raw}</Text>
+                      {card.phones[0].isWhatsapp && (
+                        <View style={styles.whatsappChip}>
+                          <Text style={styles.whatsappText}>WhatsApp</Text>
+                        </View>
+                      )}
                     </View>
-                  ))}
+                  )}
+
+                  {card.emails && card.emails[0] && (
+                    <View style={styles.contactRow}>
+                      <Mail size={14} color={colors.textSecondary} style={styles.contactIcon} />
+                      <Text style={styles.contactText}>{card.emails[0]}</Text>
+                    </View>
+                  )}
+
+                  {card.rawAddress && (
+                    <View style={styles.contactRow}>
+                      <MapPin size={14} color={colors.textSecondary} style={styles.contactIcon} />
+                      <Text style={styles.contactText} numberOfLines={1}>
+                        {card.rawAddress}
+                      </Text>
+                    </View>
+                  )}
                 </View>
-              )}
 
-              {/* Quick Actions Row */}
-              <View style={styles.cardActionsRow}>
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => window.open(`tel:${card.phones[0]?.raw}`)}
-                >
-                  <Phone size={14} color={colors.primary} />
-                  <Text style={styles.actionBtnText}>Call</Text>
-                </TouchableOpacity>
+                {/* Tags */}
+                {card.tags && card.tags.length > 0 && (
+                  <View style={styles.cardTagsRow}>
+                    {card.tags.map((t, idx) => (
+                      <View key={idx} style={styles.tagChip}>
+                        <Text style={styles.tagText}>{t}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => window.open(`https://wa.me/${card.phones[0]?.raw?.replace(/[^0-9]/g, '')}`)}
-                >
-                  <Text style={[styles.actionBtnText, { color: '#10B981', fontWeight: '700' }]}>
-                    WhatsApp
-                  </Text>
-                </TouchableOpacity>
+                {/* Quick Actions Row */}
+                <View style={styles.cardActionsRow}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => window.open(`tel:${card.phones[0]?.raw}`)}
+                  >
+                    <Phone size={14} color={colors.primary} />
+                    <Text style={styles.actionBtnText}>Call</Text>
+                  </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.actionBtn}
-                  onPress={() => window.open(`mailto:${card.emails[0]}`)}
-                >
-                  <Mail size={14} color={colors.textSecondary} />
-                  <Text style={styles.actionBtnText}>Email</Text>
-                </TouchableOpacity>
-              </View>
-            </Card>
-          ))
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => window.open(`https://wa.me/${card.phones[0]?.raw?.replace(/[^0-9]/g, '')}`)}
+                  >
+                    <Text style={[styles.actionBtnText, { color: '#10B981', fontWeight: '700' }]}>
+                      WhatsApp
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => window.open(`mailto:${card.emails[0]}`)}
+                  >
+                    <Mail size={14} color={colors.textSecondary} />
+                    <Text style={styles.actionBtnText}>Email</Text>
+                  </TouchableOpacity>
+                </View>
+              </Card>
+            ))}
+          </View>
         )}
       </ScrollView>
     </View>
@@ -236,39 +252,45 @@ export function SavedCardsScreen({ onScanNewCard }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC'
+    backgroundColor: '#0F172A'
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderBottomWidth: 1,
-    borderColor: colors.border
+    borderColor: '#334155'
+  },
+  desktopTopBar: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md
   },
   searchWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#0F172A',
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     height: 40,
-    marginRight: spacing.sm
+    marginRight: spacing.sm,
+    borderWidth: 1,
+    borderColor: '#334155'
   },
   input: {
     flex: 1,
     fontSize: 13,
-    color: colors.textPrimary,
+    color: '#FFFFFF',
     outlineStyle: 'none'
   },
   scanBtn: {
     height: 40
   },
   tagFiltersWrap: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1E293B',
     borderBottomWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#334155',
     paddingVertical: spacing.sm
   },
   tagScroll: {
@@ -279,16 +301,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: radii.full,
-    backgroundColor: '#F1F5F9',
-    marginRight: 6
+    backgroundColor: '#0F172A',
+    marginRight: 6,
+    borderWidth: 1,
+    borderColor: '#334155'
   },
   tagFilterChipActive: {
-    backgroundColor: colors.primary
+    backgroundColor: colors.primary,
+    borderColor: colors.primary
   },
   tagFilterText: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary
+    color: '#94A3B8'
   },
   tagFilterTextActive: {
     color: '#FFFFFF',
@@ -298,11 +323,28 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingBottom: spacing.xxxl
   },
+  desktopCardsScroll: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl
+  },
+  cardsGrid: {
+    flexDirection: 'column',
+    width: '100%'
+  },
+  desktopCardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md
+  },
   cardItem: {
     backgroundColor: '#FFFFFF',
     borderColor: colors.border,
     padding: spacing.md,
     marginBottom: spacing.md
+  },
+  desktopCardItem: {
+    width: 'calc(50% - 8px)',
+    marginBottom: 0
   },
   cardHeader: {
     flexDirection: 'row',
@@ -317,13 +359,13 @@ const styles = StyleSheet.create({
   designation: {
     fontSize: 12,
     fontWeight: '600',
-    color: colors.textSecondary,
-    marginTop: 1
+    color: colors.primary,
+    marginTop: 2
   },
   companyName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
-    color: colors.accentBlue,
+    color: colors.textSecondary,
     marginTop: 2
   },
   ratingBadge: {
@@ -332,8 +374,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: radii.xs,
-    gap: 3
+    borderRadius: radii.sm,
+    gap: 2
   },
   ratingText: {
     fontSize: 11,
@@ -342,9 +384,9 @@ const styles = StyleSheet.create({
   },
   contactDetails: {
     backgroundColor: '#F8FAFC',
-    borderRadius: radii.sm,
     padding: spacing.sm,
-    marginVertical: spacing.xs,
+    borderRadius: radii.sm,
+    marginBottom: spacing.sm,
     gap: 4
   },
   contactRow: {
@@ -352,46 +394,46 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   contactIcon: {
-    marginRight: spacing.sm
+    marginRight: 6
   },
   contactText: {
     fontSize: 12,
     color: colors.textPrimary,
+    fontWeight: '500',
     flex: 1
   },
   whatsappChip: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#DCFCE7',
     paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radii.xs
+    paddingVertical: 2,
+    borderRadius: 4
   },
   whatsappText: {
+    color: '#16A34A',
     fontSize: 10,
-    fontWeight: '700',
-    color: '#059669'
+    fontWeight: '700'
   },
   cardTagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    marginTop: spacing.xs
+    marginBottom: spacing.sm
   },
   tagChip: {
-    backgroundColor: '#F1F5F9',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radii.xs
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4
   },
   tagText: {
-    fontSize: 10,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: colors.primary,
     fontWeight: '600'
   },
   cardActionsRow: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderColor: colors.border,
-    marginTop: spacing.sm,
+    borderColor: '#F1F5F9',
     paddingTop: spacing.sm,
     gap: spacing.sm
   },
@@ -401,12 +443,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
-    backgroundColor: '#F8FAFC',
     borderRadius: radii.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 4,
-    cursor: 'pointer'
+    backgroundColor: '#F8FAFC',
+    gap: 4
   },
   actionBtnText: {
     fontSize: 12,

@@ -1,14 +1,21 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { colors } from '../theme';
 
 export function Layout({ children, header, footer }) {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
+
   return (
     <View style={styles.outerContainer}>
-      <View style={styles.phoneFrame}>
+      <View style={[styles.mainWrapper, isDesktop ? styles.desktopWrapper : styles.mobileWrapper]}>
         {header}
-        <View style={styles.contentArea}>{children}</View>
-        {footer}
+        <View style={[styles.contentArea, isDesktop && styles.desktopContentArea]}>
+          <View style={[styles.innerContainer, isDesktop && styles.desktopInnerContainer]}>
+            {children}
+          </View>
+        </View>
+        {!isDesktop && footer}
       </View>
     </View>
   );
@@ -19,23 +26,44 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F172A', // Dark Slate desktop background
+    backgroundColor: '#0B1120', // Darker elegant backdrop for desktop canvas
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    overflow: 'hidden'
   },
-  phoneFrame: {
+  mainWrapper: {
     width: '100%',
-    maxWidth: 480, // Responsive mobile container limit for Chrome desktop
     height: '100%',
-    maxHeight: '100%',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#0F172A',
     flexDirection: 'column',
-    overflow: 'hidden',
+    overflow: 'hidden'
+  },
+  mobileWrapper: {
+    maxWidth: 480,
     boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+  },
+  desktopWrapper: {
+    maxWidth: '100%',
+    backgroundColor: '#0F172A'
   },
   contentArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-    overflow: 'hidden'
+    backgroundColor: '#0F172A',
+    overflow: 'hidden',
+    width: '100%',
+    alignItems: 'center'
+  },
+  desktopContentArea: {
+    backgroundColor: '#0B1120'
+  },
+  innerContainer: {
+    width: '100%',
+    height: '100%',
+    flex: 1
+  },
+  desktopInnerContainer: {
+    maxWidth: 1280,
+    width: '100%',
+    alignSelf: 'center'
   }
 });
