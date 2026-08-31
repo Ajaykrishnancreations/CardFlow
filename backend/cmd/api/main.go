@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,6 +31,9 @@ import (
 	"github.com/go-chi/cors"
 )
 
+//go:embed dist/*
+var embeddedFrontend embed.FS
+
 func main() {
 	// 1. Load configuration and setup structured logger
 	cfg := config.Load()
@@ -44,7 +50,6 @@ func main() {
 		slog.Warn("PostgreSQL pool initialization note", "error", err)
 	} else {
 		defer dbPool.Close()
-		// Run auto migrations
 		_ = database.RunMigrations(ctx, dbPool)
 	}
 
@@ -84,7 +89,7 @@ func main() {
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.Timeout(30 * time.Second))
 
-	// CORS Configuration (Permissive for Web Browser & Testing)
+	// CORS Configuration (Permissive for Web Browsers & Testing)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
@@ -107,7 +112,7 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// Public Web Profile Route (e.g. https://cardflow.app/b/kovai-precision-tools)
+	// Public Web Profile Route (e.g. https://cardflow-api-fsij.onrender.com/b/kovai-precision-tools)
 	r.Get("/b/{slug}", discoveryHandler.RenderPublicHTML)
 
 	// API v1 Routes
@@ -177,45 +182,32 @@ func main() {
 		})
 	})
 
-	// Static Frontend Web Application Serve
-	staticPaths := []string{"./dist", "../frontend/dist", "frontend/dist"}
-	var staticDir string
-	for _, p := range staticPaths {
-		if info, err := os.Stat(p); err == nil && info.IsDir() {
-			staticDir = p
-			break
-		}
-	}
-
-	if staticDir != "" {
-		slog.Info("Serving frontend web application", "dir", staticDir)
-		fs := http.FileServer(http.Dir(staticDir))
+	// 6. Serve Embedded Production Frontend Web Application at Root
+	subFS, err := fs.Sub(embeddedFrontend, "dist")
+	if err == nil {
+		fileServer := http.FileServer(http.FS(subFS))
 		r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
-			path := staticDir + req.URL.Path
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				http.ServeFile(w, req, staticDir+"/index.html")
+			path := strings.TrimPrefix(req.URL.Path, "/")
+			// If file exists in embedded dist, serve it
+			if f, err := subFS.Open(path); err == nil && path != "" {
+				_ = f.Close()
+				fileServer.ServeHTTP(w, req)
 				return
 			}
-			fs.ServeHTTP(w, req)
-		})
-	} else {
-		// Root fallback if dist not built
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			response.JSON(w, http.StatusOK, map[string]interface{}{
-				"name":        "CardFlow Modular Monolith API",
-				"status":      "online",
-				"version":     "1.0.0",
-				"docs":        "/api/v1",
-				"environment": cfg.Env,
-				"timestamp":   time.Now(),
-			})
-		})
-		r.Head("/", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
+			// Otherwise serve index.html for React SPA client-side routing
+			indexFile, err := subFS.Open("index.html")
+			if err == nil {
+				defer indexFile.Close()
+				http.ServeContent(w, req, "index.html", time.Now(), indexFile.(interface {
+					ReadSeeker()
+				}).(ioReadSeeker))
+			} else {
+				fileServer.ServeHTTP(w, req)
+			}
 		})
 	}
 
-	// 6. Start HTTP Server with Graceful Shutdown
+	// 7. Start HTTP Server with Graceful Shutdown
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
@@ -225,7 +217,7 @@ func main() {
 	}
 
 	go func() {
-		slog.Info(fmt.Sprintf("CardFlow Go Backend running at http://localhost:%s", cfg.Port))
+		slog.Info(fmt.Sprintf("CardFlow Go Backend & Frontend running at http://localhost:%s", cfg.Port))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("Server listen error", "error", err)
 		}
@@ -245,4 +237,9 @@ func main() {
 	}
 
 	slog.Info("Server stopped cleanly")
+}
+
+type ioReadSeeker interface {
+	fs.File
+	Seek(offset int64, whence int) (int64, error)
 }
