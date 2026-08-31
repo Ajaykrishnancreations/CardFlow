@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { mockBusinesses } from '../data/mockData';
 import { apiClient } from '../services/api';
 
@@ -80,8 +80,8 @@ export const DEV_TEST_ACCOUNTS = {
     city: 'Coimbatore',
     state: 'Tamil Nadu',
     plan: 'plus',
-    freeScansRemaining: 30,
-    credits: 45,
+    freeScansRemaining: 100,
+    credits: 50,
     isIdVerified: true,
     ownedBusinessIds: ['biz-1', 'biz-2']
   },
@@ -123,6 +123,20 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(false);
   const [pendingPhone, setPendingPhone] = useState('');
   const [isNewUser, setIsNewUser] = useState(false);
+  const [savedCards, setSavedCards] = useState([]);
+
+  // Load user's saved card vault
+  const loadUserVault = useCallback(async (authToken) => {
+    const currentToken = authToken || token;
+    if (!currentToken) {
+      setSavedCards([]);
+      return;
+    }
+    const cards = await apiClient.getCards(currentToken);
+    if (cards && Array.isArray(cards)) {
+      setSavedCards(cards);
+    }
+  }, [token]);
 
   // Check saved session on startup
   useEffect(() => {
@@ -137,34 +151,29 @@ export function AuthProvider({ children }) {
         if (parsed.role === 'owner' && parsed.ownedBusinessIds?.length) {
           setActiveBusinessId(parsed.ownedBusinessIds[0]);
         }
+        loadUserVault(savedToken);
       }
     } catch (e) {
       console.warn('Could not read session storage', e);
     }
-  }, []);
+  }, [loadUserVault]);
 
   const sendOtp = async (phone) => {
     setIsLoading(true);
     setPendingPhone(phone);
-    
-    // Trigger real backend API network call
     await apiClient.sendOtp(phone);
-    
     setIsLoading(false);
     return { success: true, message: 'OTP sent successfully (Code: 123456)' };
   };
 
   const verifyOtp = async (phone, enteredOtp) => {
     setIsLoading(true);
-
-    // Trigger real backend API network call
     const apiRes = await apiClient.verifyOtp(phone, enteredOtp);
 
     // Match against development test accounts
     let matchedAccount = null;
     let isBrandNew = false;
 
-    // Check all configured accounts
     for (const key of Object.keys(DEV_TEST_ACCOUNTS)) {
       const acc = DEV_TEST_ACCOUNTS[key];
       if (acc.phone === phone && (enteredOtp === acc.otp || enteredOtp === '123456')) {
@@ -173,14 +182,13 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // If new number with OTP 123456
     if (!matchedAccount && (enteredOtp === '123456' || enteredOtp.length === 6)) {
       isBrandNew = true;
       matchedAccount = {
         phone,
         otp: '123456',
         role: 'user',
-        name: '',
+        name: 'CardFlow User',
         city: 'Coimbatore',
         state: 'Tamil Nadu',
         plan: 'free',
@@ -196,7 +204,7 @@ export function AuthProvider({ children }) {
       return { success: false, error: 'Invalid OTP. For dev testing, use OTP: 123456' };
     }
 
-    const liveJwt = apiRes?.data?.access_token || `cf_jwt_${matchedAccount.role}_${Date.now()}`;
+    const liveJwt = apiRes?.data?.access_token || apiRes?.access_token || `cf_token_${matchedAccount.phone}`;
     setUser(matchedAccount);
     setRole(matchedAccount.role);
     setToken(liveJwt);
@@ -210,6 +218,9 @@ export function AuthProvider({ children }) {
       localStorage.setItem('cf_user', JSON.stringify(matchedAccount));
       localStorage.setItem('cf_token', liveJwt);
     } catch (e) {}
+
+    // Load this user's vault
+    loadUserVault(liveJwt);
 
     setIsLoading(false);
     return { success: true, user: matchedAccount, isNewUser: isBrandNew };
@@ -238,12 +249,49 @@ export function AuthProvider({ children }) {
     } catch (e) {}
   };
 
+  // Helper to check if a business is already saved in this user's vault
+  const isBusinessSaved = useCallback((biz) => {
+    if (!biz || !savedCards || savedCards.length === 0) return false;
+    const bName = (biz.name || '').toLowerCase().trim();
+    const bPhone = (biz.phone || '').replace(/\D/g, '');
+
+    return savedCards.some((card) => {
+      const cCompany = (card.company || card.person_name || '').toLowerCase().trim();
+      const cPhone = (card.phones?.[0]?.raw || card.phones?.[0]?.e164 || '').replace(/\D/g, '');
+      if (bName && cCompany && (cCompany.includes(bName) || bName.includes(cCompany))) return true;
+      if (bPhone && cPhone && (cPhone.includes(bPhone) || bPhone.includes(cPhone))) return true;
+      return false;
+    });
+  }, [savedCards]);
+
+  // Save a business card directly from discovery into user vault
+  const saveBusinessToVault = async (biz) => {
+    if (!biz || !token) return;
+    const payload = {
+      person_name: biz.name || 'Business Contact',
+      designation: 'Owner / Partner',
+      company: biz.name || 'Business Enterprise',
+      website: `https://cardflow.app/b/${biz.slug || ''}`,
+      notes: `Saved from Discover Businesses (${biz.category || ''})`,
+      met_context: 'Discover Directory',
+      phones: biz.phone ? [{ raw: biz.phone, e164: biz.phone.replace(/[^0-9+]/g, ''), type: 'work', is_whatsapp: true }] : [],
+      emails: biz.email ? [biz.email] : [],
+      raw_address: biz.address || 'Coimbatore, Tamil Nadu',
+      tags: [biz.category || 'Verified Business', 'Directory Lead']
+    };
+
+    const saved = await apiClient.saveCard(payload, token);
+    await loadUserVault(token);
+    return saved;
+  };
+
   const logout = () => {
     setUser(null);
     setRole(null);
     setToken(null);
     setPendingPhone('');
     setIsNewUser(false);
+    setSavedCards([]);
     try {
       localStorage.removeItem('cf_user');
       localStorage.removeItem('cf_token');
@@ -265,6 +313,10 @@ export function AuthProvider({ children }) {
         isLoading,
         pendingPhone,
         activeBusinessId,
+        savedCards,
+        isBusinessSaved,
+        saveBusinessToVault,
+        loadUserVault,
         sendOtp,
         verifyOtp,
         completeOnboarding,

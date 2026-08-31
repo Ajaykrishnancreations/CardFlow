@@ -14,20 +14,34 @@ import {
   Send,
   X,
   CheckCircle2,
-  QrCode
+  QrCode,
+  BookmarkCheck,
+  Bookmark
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { useAuth } from '../../context/AuthContext';
 
 export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
+  const { isBusinessSaved, saveBusinessToVault } = useAuth();
   const [showEnquiryModal, setShowEnquiryModal] = useState(false);
   const [enquiryMessage, setEnquiryMessage] = useState('');
   const [sharePhone, setSharePhone] = useState(true);
   const [enquirySent, setEnquirySent] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!business) return null;
+
+  const isSaved = isBusinessSaved(business);
+
+  const handleSaveToVault = async () => {
+    if (isSaved || isSaving) return;
+    setIsSaving(true);
+    await saveBusinessToVault(business);
+    setIsSaving(false);
+  };
 
   const handleSendEnquiry = () => {
     if (!enquiryMessage.trim()) return;
@@ -58,6 +72,13 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Business Header Card */}
         <Card style={styles.profileHeaderCard}>
+          {isSaved && (
+            <View style={styles.savedBadgeTop}>
+              <BookmarkCheck size={14} color="#059669" style={{ marginRight: 4 }} />
+              <Text style={styles.savedBadgeText}>SAVED IN VAULT</Text>
+            </View>
+          )}
+
           <View style={styles.logoRow}>
             <View style={styles.logoBadge}>
               <Building2 size={32} color={colors.primary} />
@@ -86,6 +107,23 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
                 <MessageSquare size={18} color={colors.verifiedGst} />
               </View>
               <Text style={styles.actionLabel}>WhatsApp</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCircleBtn}
+              onPress={handleSaveToVault}
+              disabled={isSaved || isSaving}
+            >
+              <View style={[styles.actionCircle, { backgroundColor: isSaved ? '#ECFDF5' : '#F1F5F9' }]}>
+                {isSaved ? (
+                  <BookmarkCheck size={18} color="#059669" />
+                ) : (
+                  <Bookmark size={18} color={colors.primary} />
+                )}
+              </View>
+              <Text style={[styles.actionLabel, isSaved && { color: '#059669', fontWeight: '700' }]}>
+                {isSaved ? 'Saved' : 'Save'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionCircleBtn} onPress={() => setShowEnquiryModal(true)}>
@@ -169,58 +207,70 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
             <Text style={[styles.infoText, { color: colors.primary }]}>{business.website}</Text>
           </View>
         </Card>
+
+        {/* Verification & Trust */}
+        <Card style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Trust & Verification</Text>
+          <View style={styles.trustRow}>
+            <ShieldCheck size={20} color={colors.verifiedGst} style={{ marginRight: spacing.sm }} />
+            <View>
+              <Text style={styles.trustTitle}>Govt. GSTIN Verified Listing</Text>
+              <Text style={styles.trustSub}>Verified on GST Portal • Active Status</Text>
+            </View>
+          </View>
+        </Card>
       </ScrollView>
 
-      {/* Send Enquiry Modal */}
+      {/* Direct Enquiry Modal Sheet */}
       {showEnquiryModal && (
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Send Enquiry</Text>
+              <Text style={styles.modalTitle}>Enquire with {business.name}</Text>
               <TouchableOpacity onPress={() => setShowEnquiryModal(false)}>
                 <X size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             {enquirySent ? (
-              <View style={styles.successBox}>
-                <CheckCircle2 size={40} color={colors.verifiedGst} />
-                <Text style={styles.successTitle}>Enquiry Dispatched!</Text>
-                <Text style={styles.successDesc}>The business owner has been notified via instant push.</Text>
+              <View style={styles.enquirySuccess}>
+                <CheckCircle2 size={44} color={colors.success} style={{ marginBottom: spacing.sm }} />
+                <Text style={styles.successTitle}>Enquiry Sent!</Text>
+                <Text style={styles.successSub}>The business owner has been notified via WhatsApp and SMS.</Text>
               </View>
             ) : (
-              <>
-                <Text style={styles.enquiryToText}>To: <Text style={{ fontWeight: '700' }}>{business.name}</Text></Text>
+              <View style={styles.modalBody}>
+                <Text style={styles.inputLabel}>What product or service are you looking for?</Text>
                 <TextInput
-                  value={enquiryMessage}
-                  onChangeText={setEnquiryMessage}
-                  placeholder="Describe your requirement, quantity, or query (max 500 characters)..."
+                  style={styles.textArea}
+                  placeholder="e.g. Need quotation for 500 units of custom CNC shafts by next week..."
                   placeholderTextColor={colors.textMuted}
                   multiline
                   numberOfLines={4}
-                  maxLength={500}
-                  style={styles.textArea}
+                  value={enquiryMessage}
+                  onChangeText={setEnquiryMessage}
                   autoFocus
                 />
 
                 <TouchableOpacity
-                  style={styles.consentRow}
+                  style={styles.sharePhoneRow}
                   onPress={() => setSharePhone(!sharePhone)}
+                  activeOpacity={0.8}
                 >
                   <View style={[styles.checkbox, sharePhone && styles.checkboxChecked]}>
                     {sharePhone && <CheckCircle2 size={14} color="#FFFFFF" />}
                   </View>
-                  <Text style={styles.consentText}>Share my verified phone number for faster reply</Text>
+                  <Text style={styles.sharePhoneLabel}>Share my verified phone number for faster reply</Text>
                 </TouchableOpacity>
 
                 <Button
-                  title="Submit Enquiry"
+                  title="Send Direct Business Enquiry"
                   onPress={handleSendEnquiry}
                   icon={Send}
-                  size="md"
+                  size="lg"
                   style={{ marginTop: spacing.md }}
                 />
-              </>
+              </View>
             )}
           </View>
         </View>
@@ -235,21 +285,43 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC'
   },
   scrollContent: {
-    padding: spacing.lg,
+    padding: spacing.md,
     paddingBottom: spacing.xxxl
   },
   profileHeaderCard: {
     padding: spacing.lg,
-    marginBottom: spacing.md
+    marginBottom: spacing.md,
+    position: 'relative'
+  },
+  savedBadgeTop: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    zIndex: 10
+  },
+  savedBadgeText: {
+    color: '#059669',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5
   },
   logoRow: {
     flexDirection: 'row',
-    marginBottom: spacing.lg
+    alignItems: 'center',
+    marginBottom: spacing.md
   },
   logoBadge: {
     width: 60,
     height: 60,
-    borderRadius: radii.md,
+    borderRadius: radii.lg,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
@@ -257,7 +329,7 @@ const styles = StyleSheet.create({
   },
   bizName: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.textPrimary
   },
   bizCategory: {
@@ -266,19 +338,21 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   gstin: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginLeft: spacing.sm
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginLeft: spacing.sm,
+    fontFamily: 'monospace'
   },
   actionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: spacing.md
   },
   actionCircleBtn: {
-    alignItems: 'center'
+    alignItems: 'center',
+    width: 52
   },
   actionCircle: {
     width: 44,
@@ -290,84 +364,90 @@ const styles = StyleSheet.create({
   },
   actionLabel: {
     fontSize: 11,
-    fontWeight: '600',
-    color: colors.textPrimary
+    color: colors.textSecondary,
+    fontWeight: '500'
   },
   digitalCardPreview: {
-    backgroundColor: '#1E40AF',
+    backgroundColor: '#1E293B',
     borderRadius: radii.lg,
     padding: spacing.lg,
-    marginBottom: spacing.md
+    marginBottom: spacing.md,
+    borderWidth: 0
   },
   digitalCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
     marginBottom: spacing.lg
   },
   digitalOwnerName: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF'
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700'
   },
   digitalOwnerTitle: {
-    fontSize: 12,
-    color: '#BFDBFE',
-    marginBottom: 4
+    color: '#94A3B8',
+    fontSize: 13,
+    marginTop: 2
   },
   digitalBizName: {
+    color: colors.primary,
     fontSize: 14,
-    fontWeight: '700',
-    color: '#93C5FD'
+    fontWeight: '600',
+    marginTop: 6
   },
   qrIconWrap: {
-    padding: spacing.xs,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: radii.md
   },
   digitalCardBottom: {
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.2)',
-    paddingTop: spacing.sm
+    borderTopColor: '#334155',
+    paddingTop: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
   },
   digitalCardPhone: {
-    fontSize: 12,
-    color: '#EFF6FF'
+    color: '#94A3B8',
+    fontSize: 11
   },
   digitalCardUrl: {
+    color: colors.primary,
     fontSize: 11,
-    color: '#93C5FD',
-    marginTop: 2
+    fontWeight: '600'
   },
   sectionCard: {
+    padding: spacing.lg,
     marginBottom: spacing.md
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textPrimary,
     marginBottom: spacing.sm
   },
   aboutText: {
     fontSize: 13,
-    lineHeight: 20,
-    color: colors.textSecondary
+    color: colors.textSecondary,
+    lineHeight: 20
   },
   serviceChipsWrap: {
     flexDirection: 'row',
-    flexWrap: 'wrap'
+    flexWrap: 'wrap',
+    gap: spacing.xs
   },
   serviceChip: {
-    backgroundColor: colors.primaryLight,
-    paddingVertical: 5,
+    backgroundColor: colors.bgMuted,
     paddingHorizontal: 10,
-    borderRadius: radii.sm,
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm
+    paddingVertical: 6,
+    borderRadius: radii.md
   },
   serviceChipText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: colors.primaryDark
+    color: colors.textSecondary,
+    fontWeight: '500'
   },
   infoRow: {
     flexDirection: 'row',
@@ -376,9 +456,23 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    lineHeight: 18,
     color: colors.textSecondary,
-    flex: 1
+    flex: 1,
+    lineHeight: 18
+  },
+  trustRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  trustTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary
+  },
+  trustSub: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 1
   },
   modalOverlay: {
     position: 'absolute',
@@ -386,18 +480,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-    zIndex: 99
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    zIndex: 100
   },
-  modalContent: {
-    width: '100%',
-    maxWidth: 400,
+  modalSheet: {
     backgroundColor: '#FFFFFF',
-    borderRadius: radii.lg,
-    padding: spacing.xl
+    borderTopLeftRadius: radii.xl,
+    borderTopRightRadius: radii.xl,
+    padding: spacing.lg,
+    maxHeight: '80%'
   },
   modalHeader: {
     flexDirection: 'row',
@@ -410,23 +502,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary
   },
-  enquiryToText: {
+  modalBody: {},
+  inputLabel: {
     fontSize: 13,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: spacing.xs
   },
   textArea: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
     padding: spacing.md,
     fontSize: 14,
     color: colors.textPrimary,
-    height: 100,
     textAlignVertical: 'top',
+    minHeight: 100,
     outlineStyle: 'none'
   },
-  consentRow: {
+  sharePhoneRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: spacing.md
@@ -446,25 +540,24 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary
   },
-  consentText: {
+  sharePhoneLabel: {
     fontSize: 12,
-    color: colors.textSecondary,
-    flex: 1
+    color: colors.textSecondary
   },
-  successBox: {
+  enquirySuccess: {
     alignItems: 'center',
-    padding: spacing.xl
+    justifyContent: 'center',
+    paddingVertical: spacing.xl
   },
   successTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginTop: spacing.md
+    marginBottom: spacing.xs
   },
-  successDesc: {
+  successSub: {
     fontSize: 13,
     color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: spacing.xs
+    textAlign: 'center'
   }
 });

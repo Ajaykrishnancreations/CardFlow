@@ -19,21 +19,20 @@ import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
-import { mockSavedCards } from '../../data/mockData';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 
 export function SavedCardsScreen({ onScanNewCard }) {
-  const { token } = useAuth();
+  const { user, token, loadUserVault } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
 
-  const [cards, setCards] = useState(mockSavedCards);
+  const [cards, setCards] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('all');
   const [isLoading, setIsLoading] = useState(false);
 
-  const allTags = ['all', 'BNI Chapter', 'CA / Finance', 'Supplier', 'Vendor', 'CODISSIA', 'Metals', 'Scrap', 'Verified'];
+  const allTags = ['all', 'BNI Chapter', 'CA / Finance', 'Supplier', 'Vendor', 'CODISSIA', 'Metals', 'Scrap', 'Verified', 'Business Card'];
 
   const loadCards = async () => {
     setIsLoading(true);
@@ -44,7 +43,7 @@ export function SavedCardsScreen({ onScanNewCard }) {
         personName: c.person_name || 'Business Contact',
         designation: c.designation || 'Partner',
         company: c.company || 'Enterprise',
-        phones: c.phones || [{ raw: '+91 96555 87877', isWhatsapp: true }],
+        phones: c.phones || [{ raw: '+91 96555 87877', is_whatsapp: true }],
         emails: c.emails || ['contact@enterprise.com'],
         website: c.website || '',
         rawAddress: c.raw_address || 'Coimbatore, Tamil Nadu',
@@ -79,64 +78,72 @@ export function SavedCardsScreen({ onScanNewCard }) {
     return true;
   });
 
-  const handleExportVcf = () => {
-    alert('Exporting contacts to vCard (.vcf) format...');
-  };
-
   const handleExportCsv = () => {
-    alert('Exporting contacts to CSV spreadsheet...');
+    if (cards.length === 0) {
+      alert('No saved cards in your vault to export.');
+      return;
+    }
+    const headers = ['Name', 'Designation', 'Company', 'Phone', 'Email', 'Website', 'Address', 'Tags'];
+    const rows = cards.map((c) => [
+      `"${c.personName}"`,
+      `"${c.designation}"`,
+      `"${c.company}"`,
+      `"${c.phones?.[0]?.raw || ''}"`,
+      `"${c.emails?.[0] || ''}"`,
+      `"${c.website || ''}"`,
+      `"${c.rawAddress || ''}"`,
+      `"${c.tags.join(', ')}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `cardflow_vault_${user?.name || 'cards'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
     <View style={styles.container}>
-      {/* Top Search & Actions */}
+      {/* Top Search & Filter Bar */}
       <View style={[styles.topBar, isDesktop && styles.desktopTopBar]}>
-        <View style={styles.searchWrap}>
+        <View style={styles.searchInputWrap}>
           <Search size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search saved cards by name, company, tag..."
+            placeholder="Search saved cards by name, company, notes..."
             placeholderTextColor={colors.textMuted}
             style={styles.input}
           />
         </View>
 
-        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          {isDesktop && (
-            <Button
-              title="Export CSV"
-              onPress={handleExportCsv}
-              icon={FileSpreadsheet}
-              variant="outline"
-              size="sm"
-            />
-          )}
+        <TouchableOpacity onPress={loadCards} style={styles.refreshBtn} title="Refresh Vault">
+          <RefreshCw size={16} color={colors.primary} />
+        </TouchableOpacity>
+
+        {isDesktop && (
           <Button
-            title="Scan Card"
-            onPress={onScanNewCard}
-            icon={Plus}
+            title="Export CSV"
+            onPress={handleExportCsv}
+            icon={FileSpreadsheet}
+            variant="outline"
             size="sm"
-            style={styles.scanBtn}
           />
-        </View>
+        )}
       </View>
 
-      {/* Tag Filters */}
-      <View style={styles.tagFiltersWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagScroll}>
+      {/* Tags Filter Carousel */}
+      <View style={styles.tagsFilterWrap}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScroll}>
           {allTags.map((tag) => (
             <TouchableOpacity
               key={tag}
               style={[styles.tagFilterChip, selectedTag === tag && styles.tagFilterChipActive]}
               onPress={() => setSelectedTag(tag)}
             >
-              <Text
-                style={[
-                  styles.tagFilterText,
-                  selectedTag === tag && styles.tagFilterTextActive
-                ]}
-              >
+              <Text style={[styles.tagFilterText, selectedTag === tag && styles.tagFilterTextActive]}>
                 {tag === 'all' ? 'All Cards' : tag}
               </Text>
             </TouchableOpacity>
@@ -144,101 +151,101 @@ export function SavedCardsScreen({ onScanNewCard }) {
         </ScrollView>
       </View>
 
-      {/* Cards List Grid (Multi-column on Desktop, Single Column on Mobile) */}
+      {/* Cards List */}
       <ScrollView contentContainerStyle={[styles.cardsScroll, isDesktop && styles.desktopCardsScroll]} showsVerticalScrollIndicator={false}>
+        <View style={styles.resultsCountRow}>
+          <Text style={styles.resultsCountText}>
+            {filteredCards.length} Cards in {user?.name ? `${user.name}'s Vault` : 'Your Vault'}
+          </Text>
+        </View>
+
         {filteredCards.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
-            title="No Saved Cards Found"
-            description="Scan a physical business card or add tags to organize your contacts."
-            actionLabel="Scan First Card"
+            title={isLoading ? 'Loading your vault...' : 'No cards saved in your vault'}
+            description={
+              isLoading
+                ? 'Fetching your cards from the database...'
+                : 'Scan or upload visiting cards, or save businesses from Discover to build your card vault.'
+            }
+            actionTitle="Scan New Business Card"
             onAction={onScanNewCard}
           />
         ) : (
           <View style={[styles.cardsGrid, isDesktop && styles.desktopCardsGrid]}>
             {filteredCards.map((card) => (
               <Card key={card.id} style={[styles.cardItem, isDesktop && styles.desktopCardItem]}>
-                {/* Card Header: Person & Company */}
                 <View style={styles.cardHeader}>
+                  <View style={styles.cardAvatar}>
+                    <Text style={styles.cardAvatarText}>{(card.personName || card.company || 'C')[0]}</Text>
+                  </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.personName}>{card.personName}</Text>
-                    <Text style={styles.designation}>{card.designation}</Text>
-                    <Text style={styles.companyName}>{card.company}</Text>
-                  </View>
-                  <View style={styles.ratingBadge}>
-                    <Star size={14} color={colors.warning} fill={colors.warning} />
-                    <Text style={styles.ratingText}>{card.privateRating || 5}</Text>
+                    <Text style={styles.companyName}>
+                      {card.designation ? `${card.designation} • ` : ''}
+                      {card.company}
+                    </Text>
                   </View>
                 </View>
 
-                {/* Contact Information */}
-                <View style={styles.contactDetails}>
-                  {card.phones && card.phones[0] && (
-                    <View style={styles.contactRow}>
-                      <Phone size={14} color={colors.primary} style={styles.contactIcon} />
-                      <Text style={styles.contactText}>{card.phones[0].raw}</Text>
-                      {card.phones[0].isWhatsapp && (
-                        <View style={styles.whatsappChip}>
-                          <Text style={styles.whatsappText}>WhatsApp</Text>
-                        </View>
-                      )}
-                    </View>
+                {/* Contact details */}
+                <View style={styles.detailsBlock}>
+                  {card.phones?.[0]?.raw && (
+                    <TouchableOpacity
+                      style={styles.detailRow}
+                      onPress={() => window.open(`tel:${card.phones[0].raw}`)}
+                    >
+                      <Phone size={14} color={colors.primary} style={{ marginRight: 6 }} />
+                      <Text style={styles.detailText}>{card.phones[0].raw}</Text>
+                    </TouchableOpacity>
                   )}
 
-                  {card.emails && card.emails[0] && (
-                    <View style={styles.contactRow}>
-                      <Mail size={14} color={colors.textSecondary} style={styles.contactIcon} />
-                      <Text style={styles.contactText}>{card.emails[0]}</Text>
-                    </View>
+                  {card.emails?.[0] && (
+                    <TouchableOpacity
+                      style={styles.detailRow}
+                      onPress={() => window.open(`mailto:${card.emails[0]}`)}
+                    >
+                      <Mail size={14} color={colors.secondary} style={{ marginRight: 6 }} />
+                      <Text style={styles.detailText} numberOfLines={1}>{card.emails[0]}</Text>
+                    </TouchableOpacity>
                   )}
 
                   {card.rawAddress && (
-                    <View style={styles.contactRow}>
-                      <MapPin size={14} color={colors.textSecondary} style={styles.contactIcon} />
-                      <Text style={styles.contactText} numberOfLines={1}>
-                        {card.rawAddress}
-                      </Text>
+                    <View style={styles.detailRow}>
+                      <MapPin size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
+                      <Text style={styles.detailText} numberOfLines={1}>{card.rawAddress}</Text>
                     </View>
                   )}
                 </View>
 
-                {/* Tags */}
-                {card.tags && card.tags.length > 0 && (
-                  <View style={styles.cardTagsRow}>
-                    {card.tags.map((t, idx) => (
-                      <View key={idx} style={styles.tagChip}>
-                        <Text style={styles.tagText}>{t}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                {/* Tags row */}
+                <View style={styles.tagsRow}>
+                  {card.tags.map((t, idx) => (
+                    <View key={idx} style={styles.tagBadge}>
+                      <Text style={styles.tagBadgeText}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
 
-                {/* Quick Actions Row */}
-                <View style={styles.cardActionsRow}>
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => window.open(`tel:${card.phones[0]?.raw}`)}
-                  >
-                    <Phone size={14} color={colors.primary} />
-                    <Text style={styles.actionBtnText}>Call</Text>
-                  </TouchableOpacity>
+                {/* Card footer action buttons */}
+                <View style={styles.cardFooter}>
+                  {card.phones?.[0]?.raw && (
+                    <TouchableOpacity
+                      style={[styles.footerBtn, { backgroundColor: '#ECFDF5' }]}
+                      onPress={() => window.open(`https://wa.me/${card.phones[0].raw.replace(/[^0-9+]/g, '')}`)}
+                    >
+                      <Text style={[styles.footerBtnText, { color: colors.verifiedGst }]}>WhatsApp</Text>
+                    </TouchableOpacity>
+                  )}
 
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => window.open(`https://wa.me/${card.phones[0]?.raw?.replace(/[^0-9]/g, '')}`)}
-                  >
-                    <Text style={[styles.actionBtnText, { color: '#10B981', fontWeight: '700' }]}>
-                      WhatsApp
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.actionBtn}
-                    onPress={() => window.open(`mailto:${card.emails[0]}`)}
-                  >
-                    <Mail size={14} color={colors.textSecondary} />
-                    <Text style={styles.actionBtnText}>Email</Text>
-                  </TouchableOpacity>
+                  {card.phones?.[0]?.raw && (
+                    <TouchableOpacity
+                      style={styles.footerBtn}
+                      onPress={() => window.open(`tel:${card.phones[0].raw}`)}
+                    >
+                      <Text style={styles.footerBtnText}>Call</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </Card>
             ))}
@@ -252,84 +259,90 @@ export function SavedCardsScreen({ onScanNewCard }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A'
+    backgroundColor: '#F8FAFC'
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
-    backgroundColor: '#1E293B',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderColor: '#334155'
+    borderBottomColor: colors.border
   },
   desktopTopBar: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md
+    gap: spacing.md
   },
-  searchWrap: {
+  searchInputWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.bgMuted,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    height: 40,
-    marginRight: spacing.sm,
-    borderWidth: 1,
-    borderColor: '#334155'
+    height: 44,
+    marginRight: spacing.sm
   },
   input: {
     flex: 1,
-    fontSize: 13,
-    color: '#FFFFFF',
+    fontSize: 14,
+    color: colors.textPrimary,
     outlineStyle: 'none'
   },
-  scanBtn: {
-    height: 40
+  refreshBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.md,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.xs
   },
-  tagFiltersWrap: {
-    backgroundColor: '#1E293B',
+  tagsFilterWrap: {
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderColor: '#334155',
-    paddingVertical: spacing.sm
+    borderBottomColor: colors.border
   },
-  tagScroll: {
+  tagsScroll: {
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     gap: spacing.xs
   },
   tagFilterChip: {
-    paddingHorizontal: 12,
     paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: radii.full,
-    backgroundColor: '#0F172A',
-    marginRight: 6,
-    borderWidth: 1,
-    borderColor: '#334155'
+    backgroundColor: colors.bgMuted
   },
   tagFilterChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary
+    backgroundColor: colors.primary
   },
   tagFilterText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#94A3B8'
+    color: colors.textSecondary
   },
   tagFilterTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700'
+    color: '#FFFFFF'
   },
   cardsScroll: {
     padding: spacing.md,
     paddingBottom: spacing.xxxl
   },
   desktopCardsScroll: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl
+    padding: spacing.lg
+  },
+  resultsCountRow: {
+    marginBottom: spacing.sm
+  },
+  resultsCountText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary
   },
   cardsGrid: {
     flexDirection: 'column',
-    width: '100%'
+    gap: spacing.md
   },
   desktopCardsGrid: {
     flexDirection: 'row',
@@ -337,10 +350,8 @@ const styles = StyleSheet.create({
     gap: spacing.md
   },
   cardItem: {
-    backgroundColor: '#FFFFFF',
-    borderColor: colors.border,
     padding: spacing.md,
-    marginBottom: spacing.md
+    borderRadius: radii.md
   },
   desktopCardItem: {
     width: 'calc(50% - 8px)',
@@ -348,108 +359,83 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: spacing.sm
+  },
+  cardAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm
+  },
+  cardAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700'
   },
   personName: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.textPrimary
   },
-  designation: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.primary,
-    marginTop: 2
-  },
   companyName: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 2
+    marginTop: 1
   },
-  ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radii.sm,
-    gap: 2
-  },
-  ratingText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#D97706'
-  },
-  contactDetails: {
-    backgroundColor: '#F8FAFC',
-    padding: spacing.sm,
-    borderRadius: radii.sm,
-    marginBottom: spacing.sm,
+  detailsBlock: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.xs,
+    marginVertical: spacing.xs,
     gap: 4
   },
-  contactRow: {
+  detailRow: {
     flexDirection: 'row',
     alignItems: 'center'
   },
-  contactIcon: {
-    marginRight: 6
-  },
-  contactText: {
+  detailText: {
     fontSize: 12,
-    color: colors.textPrimary,
-    fontWeight: '500',
-    flex: 1
+    color: colors.textSecondary
   },
-  whatsappChip: {
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4
-  },
-  whatsappText: {
-    color: '#16A34A',
-    fontSize: 10,
-    fontWeight: '700'
-  },
-  cardTagsRow: {
+  tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    marginBottom: spacing.sm
+    marginVertical: spacing.xs
   },
-  tagChip: {
-    backgroundColor: '#EFF6FF',
+  tagBadge: {
+    backgroundColor: colors.bgMuted,
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4
+    paddingVertical: 2,
+    borderRadius: radii.sm
   },
-  tagText: {
+  tagBadgeText: {
     fontSize: 11,
-    color: colors.primary,
-    fontWeight: '600'
+    color: colors.textSecondary
   },
-  cardActionsRow: {
+  cardFooter: {
     flexDirection: 'row',
+    gap: spacing.sm,
     borderTopWidth: 1,
-    borderColor: '#F1F5F9',
+    borderTopColor: colors.border,
     paddingTop: spacing.sm,
-    gap: spacing.sm
+    marginTop: spacing.xs
   },
-  actionBtn: {
+  footerBtn: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    borderRadius: radii.sm,
-    backgroundColor: '#F8FAFC',
-    gap: 4
+    paddingVertical: 8,
+    borderRadius: radii.md,
+    backgroundColor: colors.primaryLight
   },
-  actionBtnText: {
+  footerBtnText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: colors.textPrimary
+    fontWeight: '700',
+    color: colors.primary
   }
 });

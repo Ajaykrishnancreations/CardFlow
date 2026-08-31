@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import {
   Camera,
   Upload,
@@ -15,7 +15,8 @@ import {
   ArrowRight,
   RotateCw,
   VideoOff,
-  SwitchCamera
+  SwitchCamera,
+  Languages
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Button } from '../../components/Button';
@@ -27,7 +28,7 @@ import { apiClient } from '../../services/api';
 import { extractCardWithTesseract } from '../../utils/ocrParser';
 
 export function ScanCardScreen({ onCardSaved }) {
-  const { user, token } = useAuth();
+  const { user, token, loadUserVault } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
 
@@ -46,6 +47,7 @@ export function ScanCardScreen({ onCardSaved }) {
   const [isSaving, setIsSaving] = useState(false);
   const [extractedData, setExtractedData] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const [imageRotation, setImageRotation] = useState(0);
 
   // Editable Form fields
   const [company, setCompany] = useState('');
@@ -72,6 +74,7 @@ export function ScanCardScreen({ onCardSaved }) {
   const startCamera = async (facing = cameraFacing) => {
     setCameraError('');
     setSelectedImage(null);
+    setImageRotation(0);
     stopCameraStream();
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -124,16 +127,13 @@ export function ScanCardScreen({ onCardSaved }) {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    // Source stream dimensions
     const vWidth = video.videoWidth || 1280;
     const vHeight = video.videoHeight || 720;
 
-    // Viewfinder container on-screen dimensions
     const elemRect = video.getBoundingClientRect ? video.getBoundingClientRect() : { width: 360, height: 200 };
     const elWidth = elemRect.width || 360;
     const elHeight = elemRect.height || 200;
 
-    // Compute exact cropped region visible inside the viewfinder with object-fit: cover
     const scale = Math.max(elWidth / vWidth, elHeight / vHeight);
     const visibleWidthInVideo = Math.min(vWidth, elWidth / scale);
     const visibleHeightInVideo = Math.min(vHeight, elHeight / scale);
@@ -141,12 +141,10 @@ export function ScanCardScreen({ onCardSaved }) {
     const cropX = Math.max(0, (vWidth - visibleWidthInVideo) / 2);
     const cropY = Math.max(0, (vHeight - visibleHeightInVideo) / 2);
 
-    // Set canvas to cropped card rectangle
     canvas.width = visibleWidthInVideo;
     canvas.height = visibleHeightInVideo;
 
     const ctx = canvas.getContext('2d');
-    // Draw ONLY the exact cropped card area matching the user's camera preview
     ctx.drawImage(
       video,
       cropX, cropY, visibleWidthInVideo, visibleHeightInVideo,
@@ -156,12 +154,12 @@ export function ScanCardScreen({ onCardSaved }) {
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
     stopCameraStream();
     setSelectedImage(dataUrl);
+    setImageRotation(0);
 
-    // Trigger Dynamic AI OCR extraction on captured cropped image
     processScan(dataUrl);
   };
 
-  // Process file upload or drag-drop file
+  // Process file upload or drag-drop file (handles Portrait & Landscape)
   const handleProcessFile = (file) => {
     if (!file) return;
     stopCameraStream();
@@ -169,6 +167,7 @@ export function ScanCardScreen({ onCardSaved }) {
     reader.onload = (event) => {
       const imgData = event.target.result;
       setSelectedImage(imgData);
+      setImageRotation(0);
       processScan(imgData);
     };
     reader.readAsDataURL(file);
@@ -177,6 +176,34 @@ export function ScanCardScreen({ onCardSaved }) {
   const handleFileChange = (e) => {
     const file = e.target.files && e.target.files[0];
     if (file) handleProcessFile(file);
+  };
+
+  // Rotate image by 90 degrees if user uploaded sideways
+  const handleRotateImage = () => {
+    if (!selectedImage) return;
+    const nextRotation = (imageRotation + 90) % 360;
+    setImageRotation(nextRotation);
+
+    const img = new Image();
+    img.onload = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      if (nextRotation === 90 || nextRotation === 270) {
+        canvas.width = img.height;
+        canvas.height = img.width;
+      } else {
+        canvas.width = img.width;
+        canvas.height = img.height;
+      }
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((nextRotation * Math.PI) / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+      const rotatedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      setSelectedImage(rotatedDataUrl);
+      processScan(rotatedDataUrl);
+    };
+    img.src = selectedImage;
   };
 
   // Drag and drop listeners
@@ -220,16 +247,15 @@ export function ScanCardScreen({ onCardSaved }) {
     };
   }, []);
 
-  // Truly Dynamic OCR Extraction for Any Card
+  // Dynamic Multilingual OCR Extraction (English + Tamil + Hindi)
   const processScan = async (imageSource) => {
     setIsScanning(true);
-    setScanStatusText('Extracting Text & Contact Information with AI OCR...');
+    setScanStatusText('Scanning with Multilingual AI OCR (English, Tamil, Hindi)...');
     setSuccessMsg('');
 
     try {
-      // 1. Run in-browser high-precision OCR on actual captured image
       const ocrResult = await extractCardWithTesseract(imageSource);
-      console.log('✨ [OCR Parsed Result]:', ocrResult);
+      console.log('✨ [OCR Result]:', ocrResult);
 
       if (ocrResult && (ocrResult.person_name || ocrResult.company || ocrResult.phones.length > 0 || ocrResult.emails.length > 0)) {
         setExtractedData(ocrResult);
@@ -242,7 +268,6 @@ export function ScanCardScreen({ onCardSaved }) {
         setRawAddress(ocrResult.raw_address || '');
         setTags(ocrResult.tags ? ocrResult.tags.join(', ') : 'Verified Business');
       } else {
-        // Fallback to backend extraction endpoint
         const backendResult = await apiClient.scanCard('scanned-card.jpg', token);
         if (backendResult) {
           setExtractedData(backendResult);
@@ -263,7 +288,7 @@ export function ScanCardScreen({ onCardSaved }) {
     }
   };
 
-  // Save Card to PostgreSQL Database
+  // Save Card to PostgreSQL Database (User-Scoped Vault)
   const handleSaveToDatabase = async () => {
     if (!company && !personName && !phone) {
       alert('Please enter at least Company Name, Person Name, or Phone Number.');
@@ -294,8 +319,10 @@ export function ScanCardScreen({ onCardSaved }) {
     };
 
     const saved = await apiClient.saveCard(cardPayload, token);
+    await loadUserVault(token);
+
     setIsSaving(false);
-    setSuccessMsg('Card details saved to database vault successfully!');
+    setSuccessMsg('Card details saved to your database vault successfully!');
 
     setTimeout(() => {
       if (onCardSaved) onCardSaved(saved);
@@ -313,7 +340,7 @@ export function ScanCardScreen({ onCardSaved }) {
         style={{ display: 'none' }}
       />
 
-      {/* Hidden Canvas for video frame extraction */}
+      {/* Hidden Canvas for video frame extraction & rotation */}
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
       {/* Success Notification Banner */}
@@ -326,11 +353,12 @@ export function ScanCardScreen({ onCardSaved }) {
 
       {/* Main Grid: Responsive Side-by-Side on Desktop, Stacked on Mobile */}
       <View style={[styles.mainLayout, isDesktop && styles.desktopLayoutGrid]}>
-        {/* LEFT COLUMN: Camera Viewfinder (Proper 3.5 : 2 Card Proportions) */}
+        {/* LEFT COLUMN: Camera Viewfinder */}
         <View style={[styles.leftColumn, isDesktop && styles.desktopLeftColumn]}>
           <View
             style={[
               styles.viewfinderFrame,
+              selectedImage && styles.viewfinderFrameWithImage,
               isDragging && styles.viewfinderFrameDragging,
               isDesktop && styles.desktopViewfinderFrame
             ]}
@@ -353,21 +381,37 @@ export function ScanCardScreen({ onCardSaved }) {
               }}
             />
 
-            {/* 2. Captured / Uploaded Image View (Full Preview) */}
+            {/* 2. Captured / Uploaded Image View (Flexible Portrait or Landscape) */}
             {selectedImage && !isCameraActive ? (
               <View style={styles.previewWrap}>
                 <img
                   src={selectedImage}
                   alt="Business Card"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8 }}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    objectFit: 'contain',
+                    borderRadius: 8
+                  }}
                 />
-                <TouchableOpacity
-                  style={styles.reUploadBtn}
-                  onPress={() => startCamera()}
-                >
-                  <RotateCw size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.reUploadText}>Scan Another Card</Text>
-                </TouchableOpacity>
+                <View style={styles.previewActionsRow}>
+                  <TouchableOpacity
+                    style={styles.reUploadBtn}
+                    onPress={handleRotateImage}
+                    title="Rotate 90°"
+                  >
+                    <RotateCw size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.reUploadText}>Rotate</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.reUploadBtn}
+                    onPress={() => startCamera()}
+                  >
+                    <Camera size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.reUploadText}>Retake</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : null}
 
@@ -383,8 +427,12 @@ export function ScanCardScreen({ onCardSaved }) {
                   {isDragging ? 'Drop Card Image Here' : 'Point Camera at Business Card'}
                 </Text>
                 <Text style={styles.guideSub}>
-                  {cameraError || (isDesktop ? 'Webcam / Drag & Drop' : 'Fit card in 3.5 : 2 frame')}
+                  {cameraError || (isDesktop ? 'Webcam / Drag & Drop' : 'Landscape or Portrait cards')}
                 </Text>
+                <View style={styles.langPill}>
+                  <Languages size={12} color="#94A3B8" style={{ marginRight: 4 }} />
+                  <Text style={styles.langPillText}>English • தமிழ் • हिन्दी</Text>
+                </View>
               </View>
             ) : null}
           </View>
@@ -419,7 +467,7 @@ export function ScanCardScreen({ onCardSaved }) {
               >
                 <Upload size={16} color="#CBD5E1" style={{ marginRight: 8 }} />
                 <Text style={styles.uploadFileBtnText}>
-                  {isDesktop ? 'Browse File / Drop Image' : 'Choose from Gallery / Files'}
+                  {isDesktop ? 'Browse File / Drop Image' : 'Choose from Gallery (Portrait / Landscape)'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -430,7 +478,7 @@ export function ScanCardScreen({ onCardSaved }) {
             <Card style={styles.scanningCard}>
               <Sparkles size={24} color={colors.primary} />
               <Text style={styles.scanningTitle}>{scanStatusText}</Text>
-              <Text style={styles.scanningDesc}>Reading name, role, mobile, email, website and address dynamically from card</Text>
+              <Text style={styles.scanningDesc}>Recognizing name, role, mobile, email, website and address in English, Tamil or Hindi</Text>
             </Card>
           )}
         </View>
@@ -443,7 +491,7 @@ export function ScanCardScreen({ onCardSaved }) {
                 <Sparkles size={18} color={colors.primary} style={{ marginRight: 6 }} />
                 <Text style={styles.extractedHeaderTitle}>CARD DETAILS (AUTO-FILLED & EDITABLE)</Text>
               </View>
-              <Badge type="verified" label="Dynamic OCR" />
+              <Badge type="verified" label="Dynamic Multi-Script OCR" />
             </View>
 
             <Input
@@ -451,7 +499,7 @@ export function ScanCardScreen({ onCardSaved }) {
               value={company}
               onChangeText={setCompany}
               leftIcon={Building}
-              placeholder="e.g. Real Estate / Enterprise Name"
+              placeholder="e.g. Enterprise / Company Name"
             />
 
             <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -461,7 +509,7 @@ export function ScanCardScreen({ onCardSaved }) {
                   value={personName}
                   onChangeText={setPersonName}
                   leftIcon={User}
-                  placeholder="e.g. Olivia Wilson"
+                  placeholder="e.g. Contact Person"
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -469,7 +517,7 @@ export function ScanCardScreen({ onCardSaved }) {
                   label="DESIGNATION"
                   value={designation}
                   onChangeText={setDesignation}
-                  placeholder="e.g. Real Estate Agent"
+                  placeholder="e.g. Managing Director / Partner"
                 />
               </View>
             </View>
@@ -481,7 +529,7 @@ export function ScanCardScreen({ onCardSaved }) {
                   value={phone}
                   onChangeText={setPhone}
                   leftIcon={Phone}
-                  placeholder="+123-456-7890"
+                  placeholder="+91 98765 43210"
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -490,7 +538,7 @@ export function ScanCardScreen({ onCardSaved }) {
                   value={email}
                   onChangeText={setEmail}
                   leftIcon={Mail}
-                  placeholder="hello@company.com"
+                  placeholder="contact@company.com"
                 />
               </View>
             </View>
@@ -508,7 +556,7 @@ export function ScanCardScreen({ onCardSaved }) {
               value={rawAddress}
               onChangeText={setRawAddress}
               leftIcon={MapPin}
-              placeholder="123 Anywhere St., Any City"
+              placeholder="Street, City, State, Pincode"
             />
 
             <Input
@@ -516,7 +564,7 @@ export function ScanCardScreen({ onCardSaved }) {
               value={tags}
               onChangeText={setTags}
               leftIcon={Tag}
-              placeholder="e.g. Real Estate, Agent, Property"
+              placeholder="e.g. Manufacturing, Supplier, Coimbatore"
             />
 
             <Button
@@ -579,11 +627,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13
   },
-  // Compact Standard Business Card Aspect Ratio (1.75 : 1)
   viewfinderFrame: {
     width: '100%',
-    height: 195,
-    maxHeight: 210,
+    height: 200,
+    maxHeight: 220,
     backgroundColor: '#1E293B',
     borderRadius: radii.md,
     borderWidth: 2,
@@ -594,9 +641,13 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden'
   },
-  desktopViewfinderFrame: {
+  viewfinderFrameWithImage: {
     height: 240,
-    maxHeight: 260
+    maxHeight: 280
+  },
+  desktopViewfinderFrame: {
+    height: 260,
+    maxHeight: 300
   },
   viewfinderFrameDragging: {
     borderColor: colors.primary,
@@ -611,9 +662,13 @@ const styles = StyleSheet.create({
     padding: 6,
     backgroundColor: '#0B1120'
   },
-  reUploadBtn: {
+  previewActionsRow: {
     position: 'absolute',
     bottom: 8,
+    flexDirection: 'row',
+    gap: 8
+  },
+  reUploadBtn: {
     backgroundColor: 'rgba(15, 23, 42, 0.85)',
     flexDirection: 'row',
     alignItems: 'center',
@@ -642,6 +697,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     marginTop: 2
+  },
+  langPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.full,
+    marginTop: 6
+  },
+  langPillText: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '600'
   },
   cornerTL: {
     position: 'absolute',

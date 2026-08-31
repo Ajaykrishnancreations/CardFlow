@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
-import { Search, SlidersHorizontal, MapPin, Building2, Phone, MessageSquare, Navigation, Check } from 'lucide-react';
+import { Search, SlidersHorizontal, MapPin, Building2, Phone, MessageSquare, Navigation, Check, BookmarkCheck } from 'lucide-react';
 import { colors, radii, spacing, typography, shadows } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { categories, mockBusinesses } from '../../data/mockData';
+import { useAuth } from '../../context/AuthContext';
 
 export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
+  const { isBusinessSaved, saveBusinessToVault } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCat, setSelectedCat] = useState(initialCategoryId || 'all');
   const [selectedRadius, setSelectedRadius] = useState(10); // km
@@ -134,56 +136,67 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
             }}
           />
         ) : (
-          filteredBusinesses.map((biz) => (
-            <Card key={biz.id} onPress={() => onSelectBusiness(biz)} style={styles.bizCard}>
-              <View style={styles.bizHeader}>
-                <View style={styles.bizLogo}>
-                  <Building2 size={24} color={colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.bizName}>{biz.name}</Text>
-                  <Text style={styles.bizCat}>{biz.category} • {biz.distanceKm} km</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-                    <Badge type="gst" label="GST Verified" />
-                    <Text style={styles.pincode}>Pin: {biz.pincode}</Text>
+          filteredBusinesses.map((biz) => {
+            const isSaved = isBusinessSaved(biz);
+            return (
+              <Card key={biz.id} onPress={() => onSelectBusiness(biz)} style={styles.bizCard}>
+                {/* Top Right SAVED Chip if already in user vault */}
+                {isSaved && (
+                  <View style={styles.savedChip}>
+                    <BookmarkCheck size={13} color="#059669" style={{ marginRight: 4 }} />
+                    <Text style={styles.savedChipText}>SAVED</Text>
+                  </View>
+                )}
+
+                <View style={styles.bizHeader}>
+                  <View style={styles.bizLogo}>
+                    <Building2 size={24} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1, paddingRight: isSaved ? 70 : 0 }}>
+                    <Text style={styles.bizName}>{biz.name}</Text>
+                    <Text style={styles.bizCat}>{biz.category} • {biz.distanceKm} km</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                      <Badge type="gst" label="GST Verified" />
+                      <Text style={styles.pincode}>Pin: {biz.pincode}</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              <Text style={styles.bizDesc} numberOfLines={2}>{biz.description}</Text>
+                <Text style={styles.bizDesc} numberOfLines={2}>{biz.description}</Text>
 
-              {/* Service tags */}
-              <View style={styles.serviceChipsRow}>
-                {biz.services.slice(0, 3).map((s, idx) => (
-                  <View key={idx} style={styles.serviceChip}>
-                    <Text style={styles.serviceText}>{s}</Text>
-                  </View>
-                ))}
-              </View>
+                {/* Service tags */}
+                <View style={styles.serviceChipsRow}>
+                  {biz.services.slice(0, 3).map((s, idx) => (
+                    <View key={idx} style={styles.serviceChip}>
+                      <Text style={styles.serviceText}>{s}</Text>
+                    </View>
+                  ))}
+                </View>
 
-              {/* Action Buttons */}
-              <View style={styles.bizActions}>
-                <TouchableOpacity style={styles.btnAction} onPress={() => window.open(`tel:${biz.phone}`)}>
-                  <Phone size={14} color={colors.primary} />
-                  <Text style={styles.btnActionText}>Call</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btnAction, { backgroundColor: '#ECFDF5' }]}
-                  onPress={() => window.open(`https://wa.me/${biz.phone}`)}
-                >
-                  <MessageSquare size={14} color={colors.verifiedGst} />
-                  <Text style={[styles.btnActionText, { color: colors.verifiedGst }]}>WhatsApp</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.btnAction}
-                  onPress={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(biz.address)}`)}
-                >
-                  <Navigation size={14} color={colors.textSecondary} />
-                  <Text style={[styles.btnActionText, { color: colors.textSecondary }]}>Directions</Text>
-                </TouchableOpacity>
-              </View>
-            </Card>
-          ))
+                {/* Action Buttons */}
+                <View style={styles.bizActions}>
+                  <TouchableOpacity style={styles.btnAction} onPress={() => window.open(`tel:${biz.phone}`)}>
+                    <Phone size={14} color={colors.primary} />
+                    <Text style={styles.btnActionText}>Call</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.btnAction, { backgroundColor: '#ECFDF5' }]}
+                    onPress={() => window.open(`https://wa.me/${biz.phone}`)}
+                  >
+                    <MessageSquare size={14} color={colors.verifiedGst} />
+                    <Text style={[styles.btnActionText, { color: colors.verifiedGst }]}>WhatsApp</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.btnAction}
+                    onPress={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(biz.address)}`)}
+                  >
+                    <Navigation size={14} color={colors.textSecondary} />
+                    <Text style={[styles.btnActionText, { color: colors.textSecondary }]}>Directions</Text>
+                  </TouchableOpacity>
+                </View>
+              </Card>
+            );
+          })
         )}
       </ScrollView>
     </View>
@@ -224,19 +237,16 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.bgMuted,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF'
+    justifyContent: 'center'
   },
   filterToggleActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary
+    backgroundColor: colors.primary
   },
   filterPanel: {
     backgroundColor: '#FFFFFF',
-    padding: spacing.lg,
+    padding: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border
   },
@@ -244,33 +254,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.textSecondary,
-    marginBottom: spacing.xs
+    marginBottom: spacing.xs,
+    textTransform: 'uppercase'
   },
   radiusRow: {
     flexDirection: 'row',
+    gap: spacing.sm,
     marginBottom: spacing.md
   },
   radiusChip: {
     paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: radii.sm,
-    backgroundColor: colors.bgMuted,
-    marginRight: spacing.sm
+    paddingHorizontal: 12,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF'
   },
   radiusChipActive: {
-    backgroundColor: colors.primary
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight
   },
   radiusText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary
+    color: colors.textSecondary,
+    fontWeight: '600'
   },
   radiusTextActive: {
-    color: '#FFFFFF'
+    color: colors.primary,
+    fontWeight: '700'
   },
   gstToggleRow: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginTop: spacing.xs
   },
   checkbox: {
     width: 20,
@@ -284,32 +300,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF'
   },
   checkboxChecked: {
-    backgroundColor: colors.verifiedGst,
-    borderColor: colors.verifiedGst
+    backgroundColor: colors.primary,
+    borderColor: colors.primary
   },
   gstToggleLabel: {
     fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary
+    color: colors.textPrimary,
+    fontWeight: '600'
   },
   catChipsWrapper: {
     backgroundColor: '#FFFFFF',
-    paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border
   },
   catChipsScroll: {
-    paddingHorizontal: spacing.lg
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs
   },
   catChip: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: radii.full,
     backgroundColor: colors.bgMuted,
-    marginRight: spacing.xs
+    borderWidth: 1,
+    borderColor: 'transparent'
   },
   catChipActive: {
-    backgroundColor: colors.primary
+    backgroundColor: colors.primary,
+    borderColor: colors.primary
   },
   catChipText: {
     fontSize: 12,
@@ -320,27 +339,49 @@ const styles = StyleSheet.create({
     color: '#FFFFFF'
   },
   resultsScroll: {
-    padding: spacing.lg,
+    padding: spacing.md,
     paddingBottom: spacing.xxxl
   },
   resultsMetaRow: {
-    marginBottom: spacing.md
+    marginBottom: spacing.sm
   },
   resultsCount: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: colors.textMuted
+    color: colors.textSecondary
   },
   bizCard: {
-    marginBottom: spacing.md
+    marginBottom: spacing.md,
+    position: 'relative'
+  },
+  savedChip: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    zIndex: 10
+  },
+  savedChipText: {
+    color: '#059669',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5
   },
   bizHeader: {
     flexDirection: 'row',
-    marginBottom: spacing.sm
+    alignItems: 'center',
+    marginBottom: spacing.xs
   },
   bizLogo: {
-    width: 48,
-    height: 48,
+    width: 46,
+    height: 46,
     borderRadius: radii.md,
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
@@ -355,7 +396,7 @@ const styles = StyleSheet.create({
   bizCat: {
     fontSize: 12,
     color: colors.textSecondary,
-    marginVertical: 2
+    marginTop: 1
   },
   pincode: {
     fontSize: 11,
@@ -364,22 +405,21 @@ const styles = StyleSheet.create({
   },
   bizDesc: {
     fontSize: 13,
-    lineHeight: 18,
     color: colors.textSecondary,
-    marginBottom: spacing.sm
+    lineHeight: 18,
+    marginVertical: spacing.xs
   },
   serviceChipsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: spacing.md
+    gap: 6,
+    marginVertical: spacing.xs
   },
   serviceChip: {
     backgroundColor: colors.bgMuted,
-    paddingVertical: 3,
     paddingHorizontal: 8,
-    borderRadius: radii.sm,
-    marginRight: 4,
-    marginBottom: 4
+    paddingVertical: 3,
+    borderRadius: radii.sm
   },
   serviceText: {
     fontSize: 11,
@@ -387,24 +427,25 @@ const styles = StyleSheet.create({
   },
   bizActions: {
     flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: spacing.sm
   },
   btnAction: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primaryLight,
-    paddingVertical: 6,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.sm,
-    marginRight: spacing.sm
+    paddingVertical: 8,
+    borderRadius: radii.md,
+    gap: 4
   },
   btnActionText: {
     fontSize: 12,
     fontWeight: '700',
-    color: colors.primary,
-    marginLeft: 4
+    color: colors.primary
   }
 });

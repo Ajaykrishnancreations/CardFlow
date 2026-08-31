@@ -1,21 +1,29 @@
 import Tesseract from 'tesseract.js';
 
 /**
- * Intelligent Business Card Text Parser & Cleaner
- * Extracts structured fields (Company, Name, Designation, Phones, Emails, Website, Address, Tags)
- * with robust noise filtration for real physical and on-screen business cards.
+ * Intelligent Multilingual Business Card Parser (English + Tamil + Hindi)
+ * Recognizes & extracts contact cards in English, தமிழ் (Tamil), and हिन्दी (Hindi).
  */
 export async function extractCardWithTesseract(imageSource) {
   try {
-    const { data: { text } } = await Tesseract.recognize(imageSource, 'eng', {
-      logger: (m) => {
-        if (m.status === 'recognizing text') {
-          console.log(`[OCR Progress] ${(m.progress * 100).toFixed(0)}%`);
+    // Attempt multi-language recognition: English + Tamil + Hindi
+    let text = '';
+    try {
+      const result = await Tesseract.recognize(imageSource, 'eng+tam+hin', {
+        logger: (m) => {
+          if (m.status === 'recognizing text') {
+            console.log(`[OCR Multilingual] ${(m.progress * 100).toFixed(0)}%`);
+          }
         }
-      }
-    });
+      });
+      text = result.data?.text || '';
+    } catch (langErr) {
+      console.warn('Multilingual model loading fallback to English:', langErr);
+      const fallbackResult = await Tesseract.recognize(imageSource, 'eng');
+      text = fallbackResult.data?.text || '';
+    }
 
-    console.log('[Raw OCR Text Extracted]:\n', text);
+    console.log('[Raw OCR Text Extracted (Multi-script)]:\n', text);
     return parseBusinessCardText(text);
   } catch (error) {
     console.warn('[Tesseract OCR Error]:', error);
@@ -23,7 +31,7 @@ export async function extractCardWithTesseract(imageSource) {
   }
 }
 
-// Words to ignore from screen UI, browser bars, and noisy artifacts
+// Ignore artifacts from browser screen bars or UI buttons
 const UI_IGNORE_WORDS = [
   'file', 'edit', 'view', 'history', 'bookmarks', 'profiles', 'tab', 'window', 'help',
   'youtube', 'chatgpt', 'copilot', 'vercel', 'vercel.app', 'kernel', 'ajida',
@@ -31,22 +39,37 @@ const UI_IGNORE_WORDS = [
   'user', 'change card photo', 'http://', 'https://'
 ];
 
-// Common job titles and designations
+// Multilingual designation keywords (English, Tamil, Hindi)
 const DESIGNATION_KEYWORDS = [
+  // English
   'real estate agent', 'support specialist', 'computer support', 'managing partner',
   'director', 'managing director', 'manager', 'partner', 'founder', 'co-founder',
   'ceo', 'cto', 'cfo', 'coo', 'president', 'vice president', 'vp', 'consultant',
   'engineer', 'software engineer', 'architect', 'executive', 'officer',
   'specialist', 'advocate', 'doctor', 'proprietor', 'head', 'lead',
-  'representative', 'realtor', 'broker', 'accountant', 'designer', 'developer'
+  'representative', 'realtor', 'broker', 'accountant', 'designer', 'developer',
+  // Tamil Transliterated & Tamil Script
+  'உரிமையாளர்', 'நிர்வாகி', 'இயக்குனர்', 'முகவர்', 'பொறியாளர்', 'மேலாளர்',
+  'urimaiyalar', 'thalaivar', 'nirvagi',
+  // Hindi Transliterated & Devanagari Script
+  'मालिक', 'प्रबंधक', 'निदेशक', 'एजेंट', 'सलाहकार', 'व्यापारी',
+  'malik', 'prabandhak', 'nideshak'
 ];
 
-// Address indicator words
+// Address indicator words (English, Tamil, Hindi)
 const ADDRESS_KEYWORDS = [
+  // English
   'street', 'st.', 'st,', 'st ', 'road', 'rd.', 'rd,', 'nagar', 'avenue', 'ave',
   'city', 'state', 'pincode', 'pin', 'zip', 'anywhere', 'floor', 'building',
   'block', 'lane', 'sector', 'dist', 'district', 'estate', 'sidco', 'mount holly',
-  'rockville', 'ambigai', 'chinnavedapatti', 'coimbatore', 'tamil nadu'
+  'rockville', 'ambigai', 'chinnavedapatti', 'coimbatore', 'tamil nadu', 'chennai',
+  'bengaluru', 'mumbai', 'delhi',
+  // Tamil
+  'தெரு', 'சாலை', 'நகர்', 'மாவட்டம்', 'பிரிவு', 'கோவை', 'தமிழ்நாடு',
+  'theru', 'salai', 'nagar', 'mavattam',
+  // Hindi
+  'मार्ग', 'सड़क', 'गली', 'नगर', 'जिला', 'रोड', 'भवन',
+  'marg', 'sadak', 'gali', 'bhavan'
 ];
 
 export function parseBusinessCardText(rawText) {
@@ -63,14 +86,13 @@ export function parseBusinessCardText(rawText) {
     };
   }
 
-  // Split lines and filter out empty / UI artifact noise
   const rawLines = rawText.split(/\r?\n/);
   const cleanLines = [];
 
   for (let l of rawLines) {
     let line = l.trim();
-    // Remove leading punctuation / noise (e.g., "| Computer...", ". FE", "~ ")
-    line = line.replace(/^[^a-zA-Z0-9+(]+/, '').trim();
+    // Remove noise symbols from start
+    line = line.replace(/^[^\p{L}\p{N}+(]+/u, '').trim();
     if (line.length < 2) continue;
 
     const lower = line.toLowerCase();
@@ -90,13 +112,14 @@ export function parseBusinessCardText(rawText) {
 
   const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9_-]+)/gi;
   const websiteRegex = /(https?:\/\/)?(www\.)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(\.[a-zA-Z]{2,})?(\/[^\s]*)?)/gi;
+  // Accepts international, Indian, Tamil/Hindi numerals
   const phoneRegex = /(?:(?:\+|00)?\d{1,3}[-.\s]?)?(?:\(?\d{2,5}\)?[-.\s]?)?\d{3,5}[-.\s]?\d{3,5}/g;
 
   for (let i = 0; i < cleanLines.length; i++) {
     const line = cleanLines[i];
     const lower = line.toLowerCase();
 
-    // 1. Emails
+    // 1. Email Recognition
     const emailMatches = line.match(emailRegex);
     if (emailMatches) {
       emailMatches.forEach((em) => {
@@ -106,7 +129,7 @@ export function parseBusinessCardText(rawText) {
       continue;
     }
 
-    // 2. Websites
+    // 2. Website Recognition
     if (lower.includes('www.') || lower.includes('.com') || lower.includes('.in') || lower.includes('.org') || lower.includes('.net') || lower.includes('.co')) {
       const webMatches = line.match(websiteRegex);
       if (webMatches) {
@@ -127,7 +150,7 @@ export function parseBusinessCardText(rawText) {
       phoneMatches.forEach((p) => {
         const digits = p.replace(/\D/g, '');
         if (digits.length >= 7 && digits.length <= 15) {
-          const cleaned = p.trim().replace(/^[^0-9+(]+/, '');
+          const cleaned = p.trim().replace(/^[^\d+]+/, '');
           if (!phones.some((existing) => existing.raw === cleaned)) {
             phones.push({
               raw: cleaned,
@@ -139,13 +162,12 @@ export function parseBusinessCardText(rawText) {
           }
         }
       });
-      // If line only had numbers / symbols, skip to next line
       if (line.replace(/[\d\s+\-().|/]/g, '').length < 3) {
         continue;
       }
     }
 
-    // 4. Designation / Role (Check for common job titles)
+    // 4. Designation / Job Role
     const isDesigMatch = DESIGNATION_KEYWORDS.some((kw) => lower.includes(kw));
     if (isDesigMatch && !designation) {
       designation = line.replace(/^[|•\-:]\s*/, '').trim();
@@ -161,19 +183,18 @@ export function parseBusinessCardText(rawText) {
       continue;
     }
 
-    // 6. Explicit Company Header (e.g., "COMPANY", "Lipi Traders", "Acme Corp")
-    if (lower === 'company' || lower.startsWith('company ') || lower.includes('enterprise') || lower.includes('traders') || lower.includes('technologies') || lower.includes('solutions') || lower.includes('works') || lower.includes('ltd') || lower.includes('pvt')) {
+    // 6. Explicit Company Header (English, Tamil, Hindi)
+    if (lower === 'company' || lower.startsWith('company ') || lower.includes('enterprise') || lower.includes('traders') || lower.includes('technologies') || lower.includes('solutions') || lower.includes('works') || lower.includes('ltd') || lower.includes('pvt') || line.includes('நிறுவனம்') || line.includes('கம்பெனி') || line.includes('उद्योग')) {
       candidateCompanies.push(line.replace(/^[|•\-:]\s*/, '').trim());
       continue;
     }
 
-    // 7. Person Name Candidates (Clean Alphabetic Title-cased Lines)
-    const alphaOnly = line.replace(/[^a-zA-Z\s]/g, '').trim();
-    const words = alphaOnly.split(/\s+/).filter((w) => w.length >= 2);
-    if (words.length >= 1 && words.length <= 4 && line.length < 35) {
-      // Check if not containing noisy random characters
-      if (!candidateNames.includes(alphaOnly) && alphaOnly.length > 3) {
-        candidateNames.push(alphaOnly);
+    // 7. Person / Business Name Candidates (Supports Latin, Tamil \u0B80-\u0BFF, Devanagari \u0900-\u097F)
+    const validLettersOnly = line.replace(/[^a-zA-Z\s\u0B80-\u0BFF\u0900-\u097F]/g, '').trim();
+    const words = validLettersOnly.split(/\s+/).filter((w) => w.length >= 2);
+    if (words.length >= 1 && words.length <= 5 && line.length < 50) {
+      if (!candidateNames.includes(validLettersOnly) && validLettersOnly.length >= 3) {
+        candidateNames.push(validLettersOnly);
       }
     }
   }
@@ -182,7 +203,6 @@ export function parseBusinessCardText(rawText) {
   let personName = '';
   for (let nameCandidate of candidateNames) {
     const lower = nameCandidate.toLowerCase();
-    // Exclude if it is part of designation or address
     if (DESIGNATION_KEYWORDS.some((kw) => lower.includes(kw)) || ADDRESS_KEYWORDS.some((kw) => lower.includes(kw))) {
       continue;
     }
@@ -193,7 +213,6 @@ export function parseBusinessCardText(rawText) {
   // Refine Company Name
   let company = candidateCompanies[0] || '';
   if (!company) {
-    // If company is in email domain e.g. marcie.thorpe@companyname.com -> COMPANYNAME
     if (emails[0]) {
       const domainMatch = emails[0].match(/@([a-zA-Z0-9-]+)\./);
       if (domainMatch && domainMatch[1] && !['gmail', 'yahoo', 'outlook', 'hotmail', 'icloud', 'reallygreatsite'].includes(domainMatch[1])) {
@@ -208,9 +227,10 @@ export function parseBusinessCardText(rawText) {
     }
   }
 
-  // If still empty, use person's name or fallback
   if (!company) {
-    if (personName && designation) {
+    if (candidateNames.length > 1 && candidateNames[1] !== personName) {
+      company = candidateNames[1];
+    } else if (personName && designation) {
       company = `${personName} (${designation})`;
     } else if (personName) {
       company = `${personName}`;
