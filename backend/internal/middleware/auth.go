@@ -93,6 +93,16 @@ func resolveUserFromTokenOrPhone(token string) *domain.User {
 			Status: "active",
 		}
 	}
+	if strings.Contains(token, "9999988888") || strings.Contains(token, "admin") {
+		return &domain.User{
+			ID:     uuid.MustParse("00000000-0000-0000-0000-0000000000a3"),
+			Phone:  "+919999988888",
+			Name:   "Admin Supervisor",
+			Role:   domain.RoleAdmin,
+			Plan:   domain.PlanPremium,
+			Status: "active",
+		}
+	}
 	if strings.Contains(token, "7094310122") || strings.Contains(token, "raj") {
 		return &domain.User{
 			ID:     uuid.MustParse("00000000-0000-0000-0000-0000000000b1"),
