@@ -49,10 +49,9 @@ func (s *AuthService) SendOTP(ctx context.Context, rawPhone, deviceID, platform 
 		return nil, errors.New("invalid Indian mobile phone number (10 digits required)")
 	}
 
-	// 1. Check DEV test accounts
-	isDevTestAccount := s.isDevTestAccount(phone)
-	if isDevTestAccount && !s.cfg.IsProduction() {
-		slog.Info("DEV test account OTP requested (Fixed OTP: 123456)", "phone", phone)
+	// In Development or Mock SMS mode, any valid phone number can receive OTP
+	if s.cfg.DevMockSMS || !s.cfg.IsProduction() {
+		slog.Info("🚀 [DEV/MOCK OTP DISPATCHED (Fixed OTP: 123456)]", "phone", phone)
 		return &SendOTPResponse{
 			ExpiresInSeconds:      300,
 			ResendCooldownSeconds: 30,
@@ -60,7 +59,7 @@ func (s *AuthService) SendOTP(ctx context.Context, rawPhone, deviceID, platform 
 		}, nil
 	}
 
-	// 2. Production rate limiting via Redis
+	// Production rate limiting via Redis
 	if s.redis != nil && s.redis.Client != nil {
 		cooldownKey := fmt.Sprintf("otp_cooldown:%s", phone)
 		if s.redis.Client.Exists(ctx, cooldownKey).Val() > 0 {
@@ -77,10 +76,10 @@ func (s *AuthService) SendOTP(ctx context.Context, rawPhone, deviceID, platform 
 		}
 	}
 
-	// 3. Generate 6-digit cryptographic OTP
+	// Generate 6-digit cryptographic OTP
 	otpCode := s.generate6DigitCode()
 
-	// 4. Hash and save in Redis (TTL: 300 seconds)
+	// Hash and save in Redis (TTL: 300 seconds)
 	if s.redis != nil && s.redis.Client != nil {
 		hash := s.hashOTP(otpCode)
 		otpKey := fmt.Sprintf("otp:%s", phone)
@@ -91,13 +90,7 @@ func (s *AuthService) SendOTP(ctx context.Context, rawPhone, deviceID, platform 
 		s.redis.Client.Set(ctx, cooldownKey, "1", 30*time.Second)
 	}
 
-	// 5. Send via SMS gateway or Mock
-	if s.cfg.DevMockSMS || !s.cfg.IsProduction() {
-		slog.Info("🚀 [MOCK SMS DISPATCHED]", "phone", phone, "otp", otpCode)
-	} else {
-		// Production SMS Gateway integration (e.g., MSG91/Kaleyra)
-		slog.Info("Sending SMS via SMS Gateway", "phone", phone, "provider", s.cfg.SMSProvider)
-	}
+	slog.Info("Sending SMS via SMS Gateway", "phone", phone, "provider", s.cfg.SMSProvider)
 
 	return &SendOTPResponse{
 		ExpiresInSeconds:      300,
@@ -120,12 +113,12 @@ func (s *AuthService) VerifyOTP(ctx context.Context, rawPhone, otpCode, deviceID
 
 	isValid := false
 
-	// DEV Test Account Check (Strictly guarded against production)
-	if !s.cfg.IsProduction() && s.isDevTestAccount(phone) {
+	// DEV / Mock SMS Mode (Strictly guarded against production)
+	if !s.cfg.IsProduction() && (s.cfg.DevMockSMS || s.isDevTestAccount(phone)) {
 		if code == "123456" {
 			isValid = true
 		} else {
-			return nil, errors.New("invalid test OTP. For DEV accounts, use 123456")
+			return nil, errors.New("invalid test OTP. For testing, use 123456")
 		}
 	} else {
 		// Production / Standard OTP Check via Redis
@@ -189,7 +182,7 @@ func (s *AuthService) VerifyOTP(ctx context.Context, rawPhone, otpCode, deviceID
 func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.User, bool, error) {
 	if s.db == nil || s.db.Pool == nil {
 		// In-memory fallback if db not connected
-		return s.createFallbackDevUser(phone), false, nil
+		return s.createFallbackDevUser(phone), s.isBrandNewFallbackNumber(phone), nil
 	}
 
 	var u domain.User
@@ -219,17 +212,35 @@ func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.Us
 	}
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Create new user
+		// Create new user with role based on configured phone numbers
 		newID := uuid.New()
 		defaultRole := domain.RoleUser
-		if phone == "+919999988888" && !s.cfg.IsProduction() {
+		defaultPlan := domain.PlanFree
+		defaultName := "CardFlow User"
+		p := strings.TrimPrefix(phone, "+91")
+
+		if (p == "6382124970" || p == "9008722766" || p == "9999988888") && !s.cfg.IsProduction() {
 			defaultRole = domain.RoleAdmin
+			defaultPlan = domain.PlanPremium
+			if p == "6382124970" {
+				defaultName = "Ajay"
+			} else if p == "9008722766" {
+				defaultName = "Govardhan"
+			}
+		} else if p == "7094310122" {
+			defaultName = "Raj"
+			defaultPlan = domain.PlanPremium
+		} else if p == "9042938108" {
+			defaultName = "Rashiq"
+			defaultPlan = domain.PlanPlus
+		} else if p == "9677840181" {
+			defaultName = "Dharani"
 		}
 
 		_, err := s.db.Pool.Exec(ctx, `
 			INSERT INTO users (id, phone, name, city, state, role, plan, free_scans_remaining, status)
-			VALUES ($1, $2, 'CardFlow User', 'Coimbatore', 'Tamil Nadu', $3, 'free', 30, 'active')
-		`, newID, phone, defaultRole)
+			VALUES ($1, $2, $3, 'Coimbatore', 'Tamil Nadu', $4, $5, 30, 'active')
+		`, newID, phone, defaultName, defaultRole, defaultPlan)
 		if err != nil {
 			return nil, false, err
 		}
@@ -243,12 +254,12 @@ func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.Us
 		u = domain.User{
 			ID:                 newID,
 			Phone:              phone,
-			Name:               "CardFlow User",
+			Name:               defaultName,
 			City:               "Coimbatore",
 			State:              "Tamil Nadu",
 			Country:            "IN",
 			Role:               defaultRole,
-			Plan:               domain.PlanFree,
+			Plan:               defaultPlan,
 			FreeScansRemaining: 30,
 			Status:             "active",
 			CreditBalance:      10,
@@ -262,7 +273,16 @@ func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.Us
 
 func (s *AuthService) isDevTestAccount(phone string) bool {
 	p := strings.TrimPrefix(phone, "+91")
-	return p == "1234567890" || p == "9876543210" || p == "9999988888"
+	return p == "6382124970" || p == "9008722766" || p == "9999988888" ||
+		p == "7094310122" || p == "9042938108" || p == "9876543210" ||
+		p == "9677840181" || p == "1234567890"
+}
+
+func (s *AuthService) isBrandNewFallbackNumber(phone string) bool {
+	p := strings.TrimPrefix(phone, "+91")
+	return !(p == "6382124970" || p == "9008722766" || p == "9999988888" ||
+		p == "7094310122" || p == "9042938108" || p == "9876543210" ||
+		p == "9677840181" || p == "1234567890")
 }
 
 func (s *AuthService) generate6DigitCode() string {
@@ -280,16 +300,43 @@ func (s *AuthService) createFallbackDevUser(phone string) *domain.User {
 	p := strings.TrimPrefix(phone, "+91")
 	role := domain.RoleUser
 	plan := domain.PlanFree
-	name := "Normal User"
+	name := "CardFlow User"
 
-	if p == "9876543210" {
-		role = domain.RoleUser // Owner is a regular user with businesses
-		plan = domain.PlanPlus
-		name = "Suresh Natarajan"
+	// Admin accounts
+	if p == "6382124970" {
+		role = domain.RoleAdmin
+		plan = domain.PlanPremium
+		name = "Ajay"
+	} else if p == "9008722766" {
+		role = domain.RoleAdmin
+		plan = domain.PlanPremium
+		name = "Govardhan"
 	} else if p == "9999988888" {
 		role = domain.RoleAdmin
 		plan = domain.PlanPremium
 		name = "Admin Supervisor"
+	// Business Owner accounts
+	} else if p == "7094310122" {
+		role = domain.RoleUser
+		plan = domain.PlanPremium
+		name = "Raj"
+	} else if p == "9042938108" {
+		role = domain.RoleUser
+		plan = domain.PlanPlus
+		name = "Rashiq"
+	} else if p == "9876543210" {
+		role = domain.RoleUser
+		plan = domain.PlanPlus
+		name = "Suresh Natarajan"
+	// Normal User accounts
+	} else if p == "9677840181" {
+		role = domain.RoleUser
+		plan = domain.PlanFree
+		name = "Dharani"
+	} else if p == "1234567890" {
+		role = domain.RoleUser
+		plan = domain.PlanFree
+		name = "Ravi Kumar"
 	}
 
 	return &domain.User{

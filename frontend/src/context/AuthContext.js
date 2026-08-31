@@ -1,22 +1,76 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { mockBusinesses } from '../data/mockData';
 
-// Fixed Development Test Accounts (Strictly for DEV environment)
+// Fixed Development Test Accounts
 export const DEV_TEST_ACCOUNTS = {
-  NORMAL_USER: {
-    phone: '1234567890',
+  ADMIN_AJAY: {
+    phone: '6382124970',
     otp: '123456',
-    role: 'user',
-    name: 'Ravi Kumar',
-    email: 'ravi.kumar@example.com',
+    role: 'admin',
+    name: 'Ajay',
+    email: 'ajay@cardflow.app',
     city: 'Coimbatore',
     state: 'Tamil Nadu',
-    plan: 'free',
-    freeScansRemaining: 28,
-    credits: 10,
+    plan: 'premium',
+    freeScansRemaining: 9999,
+    credits: 9999,
     isIdVerified: true
   },
-  BUSINESS_OWNER: {
+  ADMIN_GOVARDHAN: {
+    phone: '9008722766',
+    otp: '123456',
+    role: 'admin',
+    name: 'Govardhan',
+    email: 'govardhan@cardflow.app',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    plan: 'premium',
+    freeScansRemaining: 9999,
+    credits: 9999,
+    isIdVerified: true
+  },
+  ADMIN_SUPERVISOR: {
+    phone: '9999988888',
+    otp: '123456',
+    role: 'admin',
+    name: 'Admin Supervisor',
+    email: 'admin@cardflow.app',
+    city: 'Coimbatore',
+    state: 'Tamil Nadu',
+    plan: 'premium',
+    freeScansRemaining: 999,
+    credits: 999,
+    isIdVerified: true
+  },
+  BUSINESS_OWNER_RAJ: {
+    phone: '7094310122',
+    otp: '123456',
+    role: 'owner',
+    name: 'Raj',
+    email: 'raj@rajenterprises.com',
+    city: 'Coimbatore',
+    state: 'Tamil Nadu',
+    plan: 'premium',
+    freeScansRemaining: 500,
+    credits: 200,
+    isIdVerified: true,
+    ownedBusinessIds: ['biz-3']
+  },
+  BUSINESS_OWNER_RASHIQ: {
+    phone: '9042938108',
+    otp: '123456',
+    role: 'owner',
+    name: 'Rashiq',
+    email: 'rashiq@rashiqtrading.com',
+    city: 'Coimbatore',
+    state: 'Tamil Nadu',
+    plan: 'plus',
+    freeScansRemaining: 150,
+    credits: 50,
+    isIdVerified: true,
+    ownedBusinessIds: ['biz-4']
+  },
+  BUSINESS_OWNER_SURESH: {
     phone: '9876543210',
     otp: '123456',
     role: 'owner',
@@ -30,17 +84,30 @@ export const DEV_TEST_ACCOUNTS = {
     isIdVerified: true,
     ownedBusinessIds: ['biz-1', 'biz-2']
   },
-  ADMIN: {
-    phone: '9999988888',
+  NORMAL_USER_DHARANI: {
+    phone: '9677840181',
     otp: '123456',
-    role: 'admin',
-    name: 'Admin Supervisor',
-    email: 'admin@cardflow.app',
+    role: 'user',
+    name: 'Dharani',
+    email: 'dharani@gmail.com',
     city: 'Coimbatore',
     state: 'Tamil Nadu',
-    plan: 'premium',
-    freeScansRemaining: 999,
-    credits: 999,
+    plan: 'free',
+    freeScansRemaining: 30,
+    credits: 10,
+    isIdVerified: true
+  },
+  NORMAL_USER_RAVI: {
+    phone: '1234567890',
+    otp: '123456',
+    role: 'user',
+    name: 'Ravi Kumar',
+    email: 'ravi.kumar@example.com',
+    city: 'Coimbatore',
+    state: 'Tamil Nadu',
+    plan: 'free',
+    freeScansRemaining: 28,
+    credits: 10,
     isIdVerified: true
   }
 };
@@ -54,6 +121,7 @@ export function AuthProvider({ children }) {
   const [activeBusinessId, setActiveBusinessId] = useState('biz-1');
   const [isLoading, setIsLoading] = useState(false);
   const [pendingPhone, setPendingPhone] = useState('');
+  const [isNewUser, setIsNewUser] = useState(false);
 
   // Check saved session on startup
   useEffect(() => {
@@ -77,46 +145,56 @@ export function AuthProvider({ children }) {
   const sendOtp = async (phone) => {
     setIsLoading(true);
     setPendingPhone(phone);
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await new Promise((resolve) => setTimeout(resolve, 300));
     setIsLoading(false);
-    return { success: true, message: 'OTP sent successfully' };
+    return { success: true, message: 'OTP sent successfully (Code: 123456)' };
   };
 
   const verifyOtp = async (phone, enteredOtp) => {
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 400));
 
     // Match against development test accounts
     let matchedAccount = null;
-    if (phone === DEV_TEST_ACCOUNTS.NORMAL_USER.phone && enteredOtp === DEV_TEST_ACCOUNTS.NORMAL_USER.otp) {
-      matchedAccount = DEV_TEST_ACCOUNTS.NORMAL_USER;
-    } else if (phone === DEV_TEST_ACCOUNTS.BUSINESS_OWNER.phone && enteredOtp === DEV_TEST_ACCOUNTS.BUSINESS_OWNER.otp) {
-      matchedAccount = DEV_TEST_ACCOUNTS.BUSINESS_OWNER;
-    } else if (phone === DEV_TEST_ACCOUNTS.ADMIN.phone && enteredOtp === DEV_TEST_ACCOUNTS.ADMIN.otp) {
-      matchedAccount = DEV_TEST_ACCOUNTS.ADMIN;
-    } else if (enteredOtp === '123456') {
-      // Default dev fallback
+    let isBrandNew = false;
+
+    // Check all configured accounts
+    for (const key of Object.keys(DEV_TEST_ACCOUNTS)) {
+      const acc = DEV_TEST_ACCOUNTS[key];
+      if (acc.phone === phone && (enteredOtp === acc.otp || enteredOtp === '123456')) {
+        matchedAccount = { ...acc };
+        break;
+      }
+    }
+
+    // If new number with OTP 123456
+    if (!matchedAccount && (enteredOtp === '123456' || enteredOtp.length === 6)) {
+      isBrandNew = true;
       matchedAccount = {
         phone,
         otp: '123456',
-        role: 'user',
-        name: 'CardFlow User',
+        role: 'user', // Initial default until onboarding completed
+        name: '',
         city: 'Coimbatore',
+        state: 'Tamil Nadu',
         plan: 'free',
         freeScansRemaining: 30,
-        credits: 10
+        credits: 10,
+        isIdVerified: false,
+        isNewUser: true
       };
     }
 
     if (!matchedAccount) {
       setIsLoading(false);
-      return { success: false, error: 'Invalid OTP or phone number. For dev, use OTP: 123456' };
+      return { success: false, error: 'Invalid OTP. For dev testing, use OTP: 123456' };
     }
 
     const mockJwt = `cf_jwt_${matchedAccount.role}_${Date.now()}`;
     setUser(matchedAccount);
     setRole(matchedAccount.role);
     setToken(mockJwt);
+    setIsNewUser(isBrandNew);
 
     if (matchedAccount.role === 'owner' && matchedAccount.ownedBusinessIds?.length) {
       setActiveBusinessId(matchedAccount.ownedBusinessIds[0]);
@@ -125,12 +203,33 @@ export function AuthProvider({ children }) {
     try {
       localStorage.setItem('cf_user', JSON.stringify(matchedAccount));
       localStorage.setItem('cf_token', mockJwt);
-    } catch (e) {
-      // Ignore in non-web environments
-    }
+    } catch (e) {}
 
     setIsLoading(false);
-    return { success: true, user: matchedAccount };
+    return { success: true, user: matchedAccount, isNewUser: isBrandNew };
+  };
+
+  const completeOnboarding = (profileData) => {
+    const updatedUser = {
+      ...user,
+      name: profileData.name || 'CardFlow User',
+      city: profileData.city || 'Coimbatore',
+      state: profileData.state || 'Tamil Nadu',
+      dob: profileData.dob || '',
+      role: profileData.role || 'user',
+      isNewUser: false,
+      businessName: profileData.businessName || '',
+      category: profileData.category || 'General',
+      ownedBusinessIds: profileData.role === 'owner' ? ['biz-new-1'] : []
+    };
+
+    setUser(updatedUser);
+    setRole(updatedUser.role);
+    setIsNewUser(false);
+
+    try {
+      localStorage.setItem('cf_user', JSON.stringify(updatedUser));
+    } catch (e) {}
   };
 
   const logout = () => {
@@ -138,6 +237,7 @@ export function AuthProvider({ children }) {
     setRole(null);
     setToken(null);
     setPendingPhone('');
+    setIsNewUser(false);
     try {
       localStorage.removeItem('cf_user');
       localStorage.removeItem('cf_token');
@@ -155,11 +255,13 @@ export function AuthProvider({ children }) {
         role,
         token,
         isAuthenticated: !!user,
+        isNewUser,
         isLoading,
         pendingPhone,
         activeBusinessId,
         sendOtp,
         verifyOtp,
+        completeOnboarding,
         logout,
         switchActiveBusiness,
         setUser

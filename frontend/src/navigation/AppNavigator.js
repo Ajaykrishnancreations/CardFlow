@@ -9,6 +9,7 @@ import { TabBar } from '../components/TabBar';
 import { SplashScreen } from '../screens/auth/SplashScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
 import { OtpScreen } from '../screens/auth/OtpScreen';
+import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
 
 // User Screens
 import { HomeScreen } from '../screens/user/HomeScreen';
@@ -34,7 +35,7 @@ import { AdminVerificationScreen } from '../screens/admin/AdminVerificationScree
 import { AdminSettingsScreen } from '../screens/admin/AdminSettingsScreen';
 
 export function AppNavigator() {
-  const { isAuthenticated, role, pendingPhone, setUser, logout } = useAuth();
+  const { isAuthenticated, role, isNewUser, pendingPhone, setUser, logout } = useAuth();
 
   // Navigation state
   const [authStep, setAuthStep] = useState('splash'); // 'splash' | 'login' | 'otp'
@@ -133,7 +134,23 @@ export function AppNavigator() {
     }
   }
 
-  // 2. AUTHENTICATED FLOW — RENDER ROLE SCREENS
+  // 2. FIRST TIME REGISTRATION / ONBOARDING FLOW
+  if (isNewUser) {
+    return (
+      <Layout
+        header={
+          <Header
+            title="Profile Registration"
+            showBack={false}
+          />
+        }
+      >
+        <OnboardingScreen onFinish={() => {}} />
+      </Layout>
+    );
+  }
+
+  // 3. AUTHENTICATED FLOW — RENDER ROLE SCREENS
   const renderScreen = () => {
     // If viewing a detailed business profile
     if (selectedBusiness) {

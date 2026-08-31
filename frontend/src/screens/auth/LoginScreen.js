@@ -72,66 +72,146 @@ export function LoginScreen({ onOtpRequested }) {
         />
       </View>
 
-      {/* Development Quick Test Accounts */}
+      {/* Registered Accounts Quick Select */}
       <Card style={styles.devCard}>
         <View style={styles.devHeader}>
           <Sparkles size={16} color={colors.warning} />
-          <Text style={styles.devTitle}>DEVELOPMENT TEST ACCOUNTS</Text>
+          <Text style={styles.devTitle}>CONFIGURED ACCOUNTS (1-TAP LOGIN)</Text>
         </View>
         <Text style={styles.devSubtitle}>
-          Select a test account below for instant 1-tap testing:
+          Select any registered admin, business owner, or user for instant test login:
         </Text>
 
-        <TouchableOpacity
-          style={styles.accountOption}
-          activeOpacity={0.7}
-          onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.NORMAL_USER)}
-        >
-          <View style={[styles.accountIcon, { backgroundColor: '#F1F5F9' }]}>
-            <User size={18} color={colors.textPrimary} />
-          </View>
-          <View style={styles.accountText}>
-            <View style={styles.accountRow}>
-              <Text style={styles.accountRole}>Normal User</Text>
-              <Text style={styles.accountPhone}>1234567890</Text>
+        {/* ADMIN ACCOUNTS */}
+        <Text style={styles.groupLabel}>ADMINISTRATORS</Text>
+        <View style={styles.accountsGrid}>
+          <TouchableOpacity
+            style={styles.accountOption}
+            activeOpacity={0.7}
+            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.ADMIN_AJAY)}
+          >
+            <View style={[styles.accountIcon, { backgroundColor: '#FEE2E2' }]}>
+              <Shield size={16} color={colors.danger} />
             </View>
-            <Text style={styles.accountDesc}>Search, Vault, AI Scanner & Contact actions</Text>
-          </View>
-        </TouchableOpacity>
+            <View style={styles.accountText}>
+              <View style={styles.accountRow}>
+                <Text style={styles.accountRole}>Ajay (Admin)</Text>
+                <Text style={styles.accountPhone}>6382124970</Text>
+              </View>
+              <Text style={styles.accountDesc}>Full Admin Control, Manual Business & Grants</Text>
+            </View>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.accountOption}
-          activeOpacity={0.7}
-          onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.BUSINESS_OWNER)}
-        >
-          <View style={[styles.accountIcon, { backgroundColor: '#EFF6FF' }]}>
-            <Briefcase size={18} color={colors.primary} />
-          </View>
-          <View style={styles.accountText}>
-            <View style={styles.accountRow}>
-              <Text style={styles.accountRole}>Business Owner</Text>
-              <Text style={styles.accountPhone}>9876543210</Text>
+          <TouchableOpacity
+            style={styles.accountOption}
+            activeOpacity={0.7}
+            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.ADMIN_GOVARDHAN)}
+          >
+            <View style={[styles.accountIcon, { backgroundColor: '#FEE2E2' }]}>
+              <Shield size={16} color={colors.danger} />
             </View>
-            <Text style={styles.accountDesc}>Manage 2+ Businesses, QR Cards, Enquiries</Text>
-          </View>
-        </TouchableOpacity>
+            <View style={styles.accountText}>
+              <View style={styles.accountRow}>
+                <Text style={styles.accountRole}>Govardhan (Admin)</Text>
+                <Text style={styles.accountPhone}>9008722766</Text>
+              </View>
+              <Text style={styles.accountDesc}>Full Admin Control & Verification Queue</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
 
-        <TouchableOpacity
-          style={styles.accountOption}
-          activeOpacity={0.7}
-          onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.ADMIN)}
-        >
-          <View style={[styles.accountIcon, { backgroundColor: '#FEE2E2' }]}>
-            <Shield size={18} color={colors.danger} />
-          </View>
-          <View style={styles.accountText}>
-            <View style={styles.accountRow}>
-              <Text style={styles.accountRole}>Admin (In-App)</Text>
-              <Text style={styles.accountPhone}>9999988888</Text>
+        {/* BUSINESS OWNERS */}
+        <Text style={styles.groupLabel}>BUSINESS OWNERS</Text>
+        <View style={styles.accountsGrid}>
+          <TouchableOpacity
+            style={styles.accountOption}
+            activeOpacity={0.7}
+            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.BUSINESS_OWNER_RAJ)}
+          >
+            <View style={[styles.accountIcon, { backgroundColor: '#EFF6FF' }]}>
+              <Briefcase size={16} color={colors.accentBlue} />
             </View>
-            <Text style={styles.accountDesc}>KYC Queue, Moderation, User/Biz Management</Text>
-          </View>
-        </TouchableOpacity>
+            <View style={styles.accountText}>
+              <View style={styles.accountRow}>
+                <Text style={styles.accountRole}>Raj (Business Owner)</Text>
+                <Text style={styles.accountPhone}>7094310122</Text>
+              </View>
+              <Text style={styles.accountDesc}>Raj Engineering Works (1 Year Free Plan)</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.accountOption}
+            activeOpacity={0.7}
+            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.BUSINESS_OWNER_RASHIQ)}
+          >
+            <View style={[styles.accountIcon, { backgroundColor: '#EFF6FF' }]}>
+              <Briefcase size={16} color={colors.accentBlue} />
+            </View>
+            <View style={styles.accountText}>
+              <View style={styles.accountRow}>
+                <Text style={styles.accountRole}>Rashiq (Business Owner)</Text>
+                <Text style={styles.accountPhone}>9042938108</Text>
+              </View>
+              <Text style={styles.accountDesc}>Rashiq Trading & Logistics (6 Mo Free Plan)</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.accountOption}
+            activeOpacity={0.7}
+            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.BUSINESS_OWNER_SURESH)}
+          >
+            <View style={[styles.accountIcon, { backgroundColor: '#EFF6FF' }]}>
+              <Briefcase size={16} color={colors.accentBlue} />
+            </View>
+            <View style={styles.accountText}>
+              <View style={styles.accountRow}>
+                <Text style={styles.accountRole}>Suresh Natarajan</Text>
+                <Text style={styles.accountPhone}>9876543210</Text>
+              </View>
+              <Text style={styles.accountDesc}>Kovai Precision Tools & Apex Infotech</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* NORMAL USERS */}
+        <Text style={styles.groupLabel}>NORMAL USERS (DISCOVERY & VAULT)</Text>
+        <View style={styles.accountsGrid}>
+          <TouchableOpacity
+            style={styles.accountOption}
+            activeOpacity={0.7}
+            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.NORMAL_USER_DHARANI)}
+          >
+            <View style={[styles.accountIcon, { backgroundColor: '#F1F5F9' }]}>
+              <User size={16} color={colors.textPrimary} />
+            </View>
+            <View style={styles.accountText}>
+              <View style={styles.accountRow}>
+                <Text style={styles.accountRole}>Dharani (User)</Text>
+                <Text style={styles.accountPhone}>9677840181</Text>
+              </View>
+              <Text style={styles.accountDesc}>Search, Digital Card Vault, Contact Leads</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.accountOption}
+            activeOpacity={0.7}
+            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.NORMAL_USER_RAVI)}
+          >
+            <View style={[styles.accountIcon, { backgroundColor: '#F1F5F9' }]}>
+              <User size={16} color={colors.textPrimary} />
+            </View>
+            <View style={styles.accountText}>
+              <View style={styles.accountRow}>
+                <Text style={styles.accountRole}>Ravi Kumar (User)</Text>
+                <Text style={styles.accountPhone}>1234567890</Text>
+              </View>
+              <Text style={styles.accountDesc}>Card Scanning & Discovery</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </Card>
     </ScrollView>
   );
@@ -139,13 +219,13 @@ export function LoginScreen({ onOtpRequested }) {
 
 const styles = StyleSheet.create({
   scrollContainer: {
-    padding: spacing.xl,
+    padding: spacing.lg,
     backgroundColor: '#FFFFFF',
     flexGrow: 1
   },
   header: {
-    marginTop: spacing.md,
-    marginBottom: spacing.xl
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg
   },
   title: {
     ...typography.titleLarge,
@@ -157,7 +237,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary
   },
   inputContainer: {
-    marginBottom: spacing.xl
+    marginBottom: spacing.lg
   },
   sendButton: {
     marginTop: spacing.sm,
@@ -166,12 +246,12 @@ const styles = StyleSheet.create({
   devCard: {
     backgroundColor: '#F8FAFC',
     borderColor: '#E2E8F0',
-    marginTop: spacing.sm
+    marginTop: spacing.xs
   },
   devHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xs
+    marginBottom: 4
   },
   devTitle: {
     fontSize: 11,
@@ -183,26 +263,37 @@ const styles = StyleSheet.create({
   devSubtitle: {
     ...typography.caption,
     color: colors.textSecondary,
-    marginBottom: spacing.md
+    marginBottom: spacing.sm
+  },
+  groupLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    marginTop: spacing.xs,
+    marginBottom: 4
+  },
+  accountsGrid: {
+    marginBottom: spacing.xs
   },
   accountOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: spacing.md,
+    padding: spacing.sm,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
-    marginBottom: spacing.sm,
+    marginBottom: 6,
     cursor: 'pointer'
   },
   accountIcon: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md
+    marginRight: spacing.sm
   },
   accountText: {
     flex: 1
@@ -213,18 +304,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between'
   },
   accountRole: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: colors.textPrimary
   },
   accountPhone: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: colors.primary
   },
   accountDesc: {
     fontSize: 11,
     color: colors.textSecondary,
-    marginTop: 2
+    marginTop: 1
   }
 });
