@@ -15,15 +15,20 @@ type DB struct {
 }
 
 func NewPostgresPool(ctx context.Context, cfg *config.Config) (*DB, error) {
-	connStr := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
-		cfg.DBUser,
-		cfg.DBPassword,
-		cfg.DBHost,
-		cfg.DBPort,
-		cfg.DBName,
-		cfg.DBSSLMode,
-	)
+	var connStr string
+	if cfg.DatabaseURL != "" {
+		connStr = cfg.DatabaseURL
+	} else {
+		connStr = fmt.Sprintf(
+			"postgres://%s:%s@%s:%s/%s?sslmode=%s",
+			cfg.DBUser,
+			cfg.DBPassword,
+			cfg.DBHost,
+			cfg.DBPort,
+			cfg.DBName,
+			cfg.DBSSLMode,
+		)
+	}
 
 	poolConfig, err := pgxpool.ParseConfig(connStr)
 	if err != nil {
@@ -49,11 +54,12 @@ func NewPostgresPool(ctx context.Context, cfg *config.Config) (*DB, error) {
 	defer cancel()
 
 	if err := pool.Ping(pingCtx); err != nil {
-		slog.Warn("Postgres ping failed (will retry on usage)", "error", err)
-	} else {
-		slog.Info("Connected to PostgreSQL + PostGIS database successfully")
+		slog.Warn("Postgres connection unavailable (falling back to memory state safely)", "error", err)
+		pool.Close()
+		return nil, err
 	}
 
+	slog.Info("Connected to PostgreSQL + PostGIS database successfully")
 	return &DB{Pool: pool}, nil
 }
 

@@ -15,21 +15,33 @@ type RedisClient struct {
 }
 
 func NewRedisClient(ctx context.Context, cfg *config.Config) (*RedisClient, error) {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
-		Password: cfg.RedisPassword,
-		DB:       cfg.RedisDB,
-	})
+	var opts *redis.Options
+	if cfg.RedisURL != "" {
+		parsedOpts, err := redis.ParseURL(cfg.RedisURL)
+		if err == nil {
+			opts = parsedOpts
+		}
+	}
+	if opts == nil {
+		opts = &redis.Options{
+			Addr:     fmt.Sprintf("%s:%s", cfg.RedisHost, cfg.RedisPort),
+			Password: cfg.RedisPassword,
+			DB:       cfg.RedisDB,
+		}
+	}
+
+	rdb := redis.NewClient(opts)
 
 	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
 	if err := rdb.Ping(pingCtx).Err(); err != nil {
-		slog.Warn("Redis ping failed (caching/sessions will operate in memory or retry)", "error", err)
-	} else {
-		slog.Info("Connected to Redis successfully")
+		slog.Warn("Redis connection unavailable (falling back to memory state safely)", "error", err)
+		_ = rdb.Close()
+		return nil, err
 	}
 
+	slog.Info("Connected to Redis successfully")
 	return &RedisClient{Client: rdb}, nil
 }
 

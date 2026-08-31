@@ -17,6 +17,7 @@ type Config struct {
 	AllowedOrigins []string
 
 	// Database
+	DatabaseURL       string
 	DBHost            string
 	DBPort            string
 	DBUser            string
@@ -28,6 +29,7 @@ type Config struct {
 	DBConnMaxLifetime string
 
 	// Redis
+	RedisURL      string
 	RedisHost     string
 	RedisPort     string
 	RedisPassword string
@@ -100,6 +102,7 @@ func Load() *Config {
 		PublicWebURL: getEnv("PUBLIC_WEB_URL", "https://cardflow.app"),
 		AllowedOrigins: strings.Split(getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://cardflow.app,cardflow://"), ","),
 
+		DatabaseURL:       getEnv("DATABASE_URL", ""),
 		DBHost:            getEnv("DB_HOST", "localhost"),
 		DBPort:            getEnv("DB_PORT", "5432"),
 		DBUser:            getEnv("DB_USER", "cardflow_app"),
@@ -110,6 +113,7 @@ func Load() *Config {
 		DBMaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 10),
 		DBConnMaxLifetime: getEnv("DB_CONN_MAX_LIFETIME", "5m"),
 
+		RedisURL:      getEnv("REDIS_URL", ""),
 		RedisHost:     getEnv("REDIS_HOST", "localhost"),
 		RedisPort:     getEnv("REDIS_PORT", "6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
