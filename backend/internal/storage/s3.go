@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"cardflow-backend/internal/config"
@@ -115,6 +117,44 @@ func (s *S3Service) GeneratePresignedUpload(ctx context.Context, userID, kind, e
 		ObjectKey:        objectKey,
 		ExpiresInSeconds: 300,
 	}, nil
+}
+
+// PutObject uploads bytes directly (used when client sends base64 card image)
+func (s *S3Service) PutObject(ctx context.Context, objectKey string, data []byte, contentType string) error {
+	bucket := s.cfg.S3PrivateBucket
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(objectKey),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		return fmt.Errorf("s3 put object: %w", err)
+	}
+	return nil
+}
+
+// GetObject downloads private card image bytes
+func (s *S3Service) GetObject(ctx context.Context, objectKey string) ([]byte, string, error) {
+	bucket := s.cfg.S3PrivateBucket
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(objectKey),
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("s3 get object: %w", err)
+	}
+	defer out.Body.Close()
+
+	data, err := io.ReadAll(out.Body)
+	if err != nil {
+		return nil, "", err
+	}
+	ct := "image/jpeg"
+	if out.ContentType != nil && *out.ContentType != "" {
+		ct = *out.ContentType
+	}
+	return data, ct, nil
 }
 
 // GetPublicURL returns the public CDN or bucket URL for a public object

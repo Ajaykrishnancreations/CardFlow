@@ -146,6 +146,8 @@ func main() {
 			// Card Vault & OCR Scanner
 			r.Get("/cards", cardHandler.ListCards)
 			r.Post("/cards", cardHandler.CreateCard)
+			r.Get("/cards/{id}/original-image", cardHandler.GetOriginalImage)
+			r.Post("/cards/{id}/original-image", cardHandler.UploadOriginalImage)
 			r.Post("/cards/upload-url", cardHandler.GetUploadURL)
 			r.Post("/cards/scan", cardHandler.ScanCard)
 			r.Delete("/cards/{id}", cardHandler.DeleteCard)

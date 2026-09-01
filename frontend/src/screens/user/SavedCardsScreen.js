@@ -3,18 +3,12 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWin
 import {
   FolderOpen,
   Search,
-  Star,
   Download,
   Phone,
   Mail,
   MapPin,
-  Tag,
-  Share2,
-  Trash2,
-  FileSpreadsheet,
-  Plus,
   RefreshCw,
-  Sparkles
+  ChevronRight
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
@@ -24,17 +18,22 @@ import { BrandSpinner, SkeletonCard } from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 
-export function SavedCardsScreen({ onScanNewCard }) {
+export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   const { user, token, savedCards: contextCards, loadUserVault } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
 
   const [cards, setCards] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTag, setSelectedTag] = useState('all');
+  const [selectedFilter, setSelectedFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
 
-  const allTags = ['all', 'BNI Chapter', 'CA / Finance', 'Supplier', 'Vendor', 'CODISSIA', 'Metals', 'Scrap', 'Verified', 'Business Card'];
+  const filterTabs = [
+    { id: 'all', label: 'All' },
+    { id: 'recent', label: 'Recent' },
+    { id: 'business', label: 'Business' },
+    { id: 'people', label: 'People' }
+  ];
 
   const formatCards = (cardList) => {
     if (!cardList || !Array.isArray(cardList)) return [];
@@ -50,8 +49,10 @@ export function SavedCardsScreen({ onScanNewCard }) {
       notes: c.notes || '',
       privateRating: c.private_rating || c.privateRating || 5,
       tags: c.tags || ['Verified'],
+      gstin: c.gstin || '',
+      originalCardImageUrl: c.original_card_image_url || c.originalCardImageUrl || '',
       savedAt: c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : '2026-08-31',
-      hasFrontImage: true,
+      hasFrontImage: !!(c.original_card_image_url || c.originalCardImageUrl),
       hasBackImage: false,
       extractStatus: c.extract_status || c.extractStatus || 'extracted'
     }));
@@ -80,11 +81,16 @@ export function SavedCardsScreen({ onScanNewCard }) {
     }
   };
 
+  // Load cards when tab opens; prefer context if already loaded (avoids duplicate fetch)
   useEffect(() => {
+    if (contextCards && contextCards.length > 0) {
+      setCards(formatCards(contextCards));
+      setIsLoading(false);
+      return;
+    }
     loadCards();
   }, [token]);
 
-  // Sync if context cards updated
   useEffect(() => {
     if (contextCards && contextCards.length > 0) {
       setCards(formatCards(contextCards));
@@ -93,84 +99,83 @@ export function SavedCardsScreen({ onScanNewCard }) {
   }, [contextCards]);
 
   const filteredCards = cards.filter((c) => {
-    if (selectedTag !== 'all' && !c.tags.includes(selectedTag)) return false;
+    if (selectedFilter === 'recent') {
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      if (new Date(c.savedAt).getTime() < weekAgo) return false;
+    }
+    if (selectedFilter === 'business' && !c.company) return false;
+    if (selectedFilter === 'people' && !c.personName) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = (c.personName || '').toLowerCase().includes(q);
       const matchCompany = (c.company || '').toLowerCase().includes(q);
-      const matchNotes = (c.notes || '').toLowerCase().includes(q);
-      if (!matchName && !matchCompany && !matchNotes) return false;
+      const matchGst = (c.gstin || '').toLowerCase().includes(q);
+      if (!matchName && !matchCompany && !matchGst) return false;
     }
     return true;
   });
 
-  const handleExportCsv = () => {
-    if (cards.length === 0) {
-      alert('No saved cards in your vault to export.');
-      return;
-    }
-    const headers = ['Name', 'Designation', 'Company', 'Phone', 'Email', 'Website', 'Address', 'Tags'];
-    const rows = cards.map((c) => [
-      `"${c.personName}"`,
-      `"${c.designation}"`,
-      `"${c.company}"`,
-      `"${c.phones?.[0]?.raw || ''}"`,
-      `"${c.emails?.[0] || ''}"`,
-      `"${c.website || ''}"`,
-      `"${c.rawAddress || ''}"`,
-      `"${c.tags.join(', ')}"`
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `cardflow_vault_${user?.name || 'cards'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExportGoogle = () => {
+    alert(`${cards.length} contacts ready.\n\nGoogle Contacts export will open OAuth flow (coming in Phase 4).`);
+  };
+
+  const handleSaveToPhone = () => {
+    alert(`${cards.length} contacts selected.\n\nSave to phone contacts uses native Android API (coming in Phase 4).`);
   };
 
   return (
     <View style={styles.container}>
-      {/* Top Search & Filter Bar */}
+      {/* Count & Export Section */}
+      <View style={styles.exportSection}>
+        <Text style={styles.countTitle}>{cards.length} Saved Cards</Text>
+        <Text style={styles.exportLabel}>Backup & Export</Text>
+        <TouchableOpacity style={styles.exportRow} onPress={handleExportGoogle}>
+          <Download size={18} color={colors.primary} style={{ marginRight: spacing.sm }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.exportTitle}>Export to Google Contacts</Text>
+            <Text style={styles.exportDesc}>Save your business contacts to Google — recover anytime.</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.exportRow, { borderBottomWidth: 0 }]} onPress={handleSaveToPhone}>
+          <Phone size={18} color={colors.primary} style={{ marginRight: spacing.sm }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.exportTitle}>Save to Phone Contacts</Text>
+            <Text style={styles.exportDesc}>Save selected or all contacts to your mobile.</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Search Bar */}
       <View style={[styles.topBar, isDesktop && styles.desktopTopBar]}>
         <View style={styles.searchInputWrap}>
           <Search size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search saved cards by name, company, notes..."
+            placeholder="Search cards..."
             placeholderTextColor={colors.textMuted}
             style={styles.input}
           />
         </View>
 
-        <TouchableOpacity onPress={loadCards} style={styles.refreshBtn} title="Refresh Vault">
+        <TouchableOpacity onPress={loadCards} style={styles.refreshBtn} title="Refresh">
           <RefreshCw size={16} color={colors.primary} />
         </TouchableOpacity>
-
-        {isDesktop && (
-          <Button
-            title="Export CSV"
-            onPress={handleExportCsv}
-            icon={FileSpreadsheet}
-            variant="outline"
-            size="sm"
-          />
-        )}
       </View>
 
-      {/* Tags Filter Carousel */}
+      {/* Filter Tabs */}
       <View style={styles.tagsFilterWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScroll}>
-          {allTags.map((tag) => (
+          {filterTabs.map((tab) => (
             <TouchableOpacity
-              key={tag}
-              style={[styles.tagFilterChip, selectedTag === tag && styles.tagFilterChipActive]}
-              onPress={() => setSelectedTag(tag)}
+              key={tab.id}
+              style={[styles.tagFilterChip, selectedFilter === tab.id && styles.tagFilterChipActive]}
+              onPress={() => setSelectedFilter(tab.id)}
             >
-              <Text style={[styles.tagFilterText, selectedTag === tag && styles.tagFilterTextActive]}>
-                {tag === 'all' ? 'All Cards' : tag}
+              <Text style={[styles.tagFilterText, selectedFilter === tab.id && styles.tagFilterTextActive]}>
+                {tab.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -203,79 +208,36 @@ export function SavedCardsScreen({ onScanNewCard }) {
         ) : (
           <View style={[styles.cardsGrid, isDesktop && styles.desktopCardsGrid]}>
             {filteredCards.map((card) => (
-              <Card key={card.id} style={[styles.cardItem, isDesktop && styles.desktopCardItem]}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardAvatar}>
-                    <Text style={styles.cardAvatarText}>{(card.personName || card.company || 'C')[0]}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.personName}>{card.personName}</Text>
-                    <Text style={styles.companyName}>
-                      {card.designation ? `${card.designation} • ` : ''}
-                      {card.company}
-                    </Text>
-                  </View>
+              <Card key={card.id} style={[styles.bizCardItem, isDesktop && styles.desktopCardItem]}>
+                <View style={styles.bizCardTop}>
+                  <View style={styles.bizCardAccent} />
+                  <Text style={styles.bizCardName}>{card.personName || 'Contact'}</Text>
+                  <Text style={styles.bizCardCompany}>{card.company}</Text>
                 </View>
-
-                {/* Contact details */}
-                <View style={styles.detailsBlock}>
-                  {card.phones?.[0]?.raw && (
-                    <TouchableOpacity
-                      style={styles.detailRow}
-                      onPress={() => window.open(`tel:${card.phones[0].raw}`)}
-                    >
-                      <Phone size={14} color={colors.primary} style={{ marginRight: 6 }} />
-                      <Text style={styles.detailText}>{card.phones[0].raw}</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {card.emails?.[0] && (
-                    <TouchableOpacity
-                      style={styles.detailRow}
-                      onPress={() => window.open(`mailto:${card.emails[0]}`)}
-                    >
-                      <Mail size={14} color={colors.secondary} style={{ marginRight: 6 }} />
-                      <Text style={styles.detailText} numberOfLines={1}>{card.emails[0]}</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {card.rawAddress && (
-                    <View style={styles.detailRow}>
-                      <MapPin size={14} color={colors.textSecondary} style={{ marginRight: 6 }} />
-                      <Text style={styles.detailText} numberOfLines={1}>{card.rawAddress}</Text>
+                <View style={styles.bizCardBody}>
+                  {card.phones?.[0]?.raw ? (
+                    <View style={styles.bizCardRow}>
+                      <Phone size={13} color={colors.primary} />
+                      <Text style={styles.bizCardText}>{card.phones[0].raw}</Text>
                     </View>
-                  )}
-                </View>
-
-                {/* Tags row */}
-                <View style={styles.tagsRow}>
-                  {card.tags.map((t, idx) => (
-                    <View key={idx} style={styles.tagBadge}>
-                      <Text style={styles.tagBadgeText}>{t}</Text>
+                  ) : null}
+                  {card.rawAddress ? (
+                    <View style={styles.bizCardRow}>
+                      <MapPin size={13} color={colors.textSecondary} />
+                      <Text style={styles.bizCardText} numberOfLines={1}>{card.rawAddress}</Text>
                     </View>
-                  ))}
+                  ) : null}
+                  {card.gstin ? (
+                    <Text style={styles.bizCardGst}>GST: {card.gstin}</Text>
+                  ) : null}
                 </View>
-
-                {/* Card footer action buttons */}
-                <View style={styles.cardFooter}>
-                  {card.phones?.[0]?.raw && (
-                    <TouchableOpacity
-                      style={[styles.footerBtn, { backgroundColor: '#ECFDF5' }]}
-                      onPress={() => window.open(`https://wa.me/${card.phones[0].raw.replace(/[^0-9+]/g, '')}`)}
-                    >
-                      <Text style={[styles.footerBtnText, { color: colors.verifiedGst }]}>WhatsApp</Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {card.phones?.[0]?.raw && (
-                    <TouchableOpacity
-                      style={styles.footerBtn}
-                      onPress={() => window.open(`tel:${card.phones[0].raw}`)}
-                    >
-                      <Text style={styles.footerBtnText}>Call</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                <TouchableOpacity
+                  style={styles.viewCardBtn}
+                  onPress={() => onSelectCard && onSelectCard(card)}
+                >
+                  <Text style={styles.viewCardBtnText}>View Card</Text>
+                  <ChevronRight size={16} color={colors.primary} />
+                </TouchableOpacity>
               </Card>
             ))}
           </View>
@@ -290,6 +252,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC'
   },
+  exportSection: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border
+  },
+  countTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginBottom: spacing.sm
+  },
+  exportLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 0.5,
+    marginBottom: spacing.xs,
+    textTransform: 'uppercase'
+  },
+  exportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border
+  },
+  exportTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  exportDesc: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -383,93 +375,44 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.md
   },
-  cardItem: {
-    padding: spacing.md,
-    borderRadius: radii.md
-  },
   desktopCardItem: {
     width: 'calc(50% - 8px)',
     marginBottom: 0
   },
-  cardHeader: {
+  bizCardItem: {
+    padding: 0,
+    overflow: 'hidden',
+    borderRadius: radii.lg
+  },
+  bizCardTop: {
+    backgroundColor: colors.primary,
+    padding: spacing.md,
+    position: 'relative',
+    overflow: 'hidden'
+  },
+  bizCardAccent: {
+    position: 'absolute',
+    top: -20,
+    right: -20,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.15)'
+  },
+  bizCardName: { fontSize: 17, fontWeight: '800', color: '#FFFFFF' },
+  bizCardCompany: { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  bizCardBody: { padding: spacing.md, gap: 6 },
+  bizCardRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  bizCardText: { fontSize: 12, color: colors.textSecondary, flex: 1 },
+  bizCardGst: { fontSize: 11, fontWeight: '700', color: colors.primary, marginTop: 4 },
+  viewCardBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.sm
-  },
-  cardAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.sm
-  },
-  cardAvatarText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700'
-  },
-  personName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.textPrimary
-  },
-  companyName: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 1
-  },
-  detailsBlock: {
+    paddingVertical: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: spacing.xs,
-    marginVertical: spacing.xs,
     gap: 4
   },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  detailText: {
-    fontSize: 12,
-    color: colors.textSecondary
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginVertical: spacing.xs
-  },
-  tagBadge: {
-    backgroundColor: colors.bgMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: radii.sm
-  },
-  tagBadgeText: {
-    fontSize: 11,
-    color: colors.textSecondary
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.sm,
-    marginTop: spacing.xs
-  },
-  footerBtn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderRadius: radii.md,
-    backgroundColor: colors.primaryLight
-  },
-  footerBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primary
-  }
+  viewCardBtnText: { fontSize: 13, fontWeight: '700', color: colors.primary }
 });

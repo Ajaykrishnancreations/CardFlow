@@ -10,8 +10,9 @@ import { BrandSpinner, SkeletonCard } from '../../components/Loader';
 import { categories as fallbackCategories, mockBusinesses } from '../../data/mockData';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
+import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 
-export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
+export function SearchScreen({ onSelectBusiness, initialCategoryId, onBack }) {
   const { isBusinessSaved, saveBusinessToVault, savedCards } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCat, setSelectedCat] = useState(initialCategoryId || 'all');
@@ -104,6 +105,9 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId }) {
 
   return (
     <View style={styles.container}>
+      {onBack ? (
+        <DetailScreenHeader title="Browse Businesses" subtitle="Discover verified businesses" onBack={onBack} />
+      ) : null}
       {/* Search Input Bar */}
       <View style={styles.topBar}>
         <View style={styles.searchInputWrap}>

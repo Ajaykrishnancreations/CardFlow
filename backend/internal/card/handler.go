@@ -8,6 +8,7 @@ import (
 	"cardflow-backend/internal/middleware"
 	"cardflow-backend/internal/storage"
 	"cardflow-backend/pkg/response"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -126,6 +127,79 @@ func (h *CardHandler) ScanCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, extracted)
+}
+
+func (h *CardHandler) GetOriginalImage(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+
+	cardID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid card id", err.Error())
+		return
+	}
+
+	if !h.svc.CardBelongsToUser(r.Context(), user.ID, cardID) {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "card not found", nil)
+		return
+	}
+
+	data, contentType, err := h.svc.GetOriginalImage(r.Context(), user.ID, cardID)
+	if err != nil || len(data) == 0 {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "original card image not found", nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+func (h *CardHandler) UploadOriginalImage(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+
+	cardID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid card id", err.Error())
+		return
+	}
+
+	if !h.svc.CardBelongsToUser(r.Context(), user.ID, cardID) {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "card not found", nil)
+		return
+	}
+
+	var req struct {
+		ImageData string `json:"image_data"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ImageData == "" {
+		response.BadRequest(w, "image_data required", "provide base64 data URL in image_data")
+		return
+	}
+
+	raw, contentType, err := decodeDataURL(req.ImageData)
+	if err != nil {
+		response.BadRequest(w, "invalid image_data", err.Error())
+		return
+	}
+
+	if err := h.svc.persistOriginalImage(r.Context(), user.ID, cardID, raw, contentType); err != nil {
+		response.InternalServerError(w, "failed to save image: "+err.Error())
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"original_card_image_url": originalImageAPIPath(cardID.String()),
+		"message":                 "original card image saved",
+	})
 }
 
 func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {

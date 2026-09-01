@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { mockBusinesses } from '../data/mockData';
 import { apiClient } from '../services/api';
 
@@ -124,6 +124,7 @@ export function AuthProvider({ children }) {
   const [pendingPhone, setPendingPhone] = useState('');
   const [isNewUser, setIsNewUser] = useState(false);
   const [savedCards, setSavedCards] = useState([]);
+  const [myBusinesses, setMyBusinesses] = useState([]);
 
   // Load user's saved card vault
   const loadUserVault = useCallback(async (authToken) => {
@@ -138,8 +139,86 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  // Check saved session on startup
+  // Load user's owned businesses (multiple per user supported)
+  const loadMyBusinesses = useCallback(async (authToken, currentUser) => {
+    const currentToken = authToken || token;
+    const u = currentUser || user;
+    if (!currentToken || !u) {
+      setMyBusinesses([]);
+      return;
+    }
+    try {
+      const list = await apiClient.getMyBusinesses(currentToken);
+      if (list && Array.isArray(list) && list.length > 0) {
+        setMyBusinesses(list);
+        try {
+          localStorage.setItem(`cf_biz_${u.phone}`, JSON.stringify(list));
+        } catch (e) {}
+        return;
+      }
+    } catch (e) {
+      console.warn('Could not load businesses from API', e);
+    }
+    // Fallback: dev owner accounts or localStorage
+    try {
+      const cached = localStorage.getItem(`cf_biz_${u.phone}`);
+      if (cached) {
+        setMyBusinesses(JSON.parse(cached));
+        return;
+      }
+    } catch (e) {}
+    // Seed businesses for dev owner test accounts
+    if (u.ownedBusinessIds?.length) {
+      const seeded = mockBusinesses.filter(
+        (b) => u.ownedBusinessIds.includes(b.id) || b.ownerPhone === u.phone || b.ownerPhone === `+91${u.phone}`
+      );
+      setMyBusinesses(seeded);
+    } else {
+      setMyBusinesses([]);
+    }
+  }, [token]);
+
+  const addMyBusiness = useCallback(async (bizData) => {
+    const newBiz = {
+      id: 'biz-' + Date.now(),
+      name: bizData.business_name,
+      business_name: bizData.business_name,
+      category: bizData.category,
+      city: bizData.city,
+      district: bizData.district,
+      state: bizData.state,
+      address: bizData.address,
+      phone: bizData.phone,
+      whatsapp: bizData.whatsapp,
+      email: bizData.email,
+      website: bizData.website,
+      gstin: bizData.gstin,
+      verification: 'pending',
+      status: 'live'
+    };
+    try {
+      await apiClient.createMyBusiness(bizData, token);
+    } catch (e) {
+      console.warn('API create business failed, saving locally', e);
+    }
+    setMyBusinesses((prev) => {
+      const updated = [newBiz, ...prev];
+      try {
+        localStorage.setItem(`cf_biz_${user?.phone}`, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+    return newBiz;
+  }, [token, user]);
+
+  const sessionRestoredRef = useRef(false);
+
+  // Restore session once on app startup — must NOT depend on loadUserVault/loadMyBusinesses
+  // (those callbacks change when token/user updates, which caused an infinite API loop)
   useEffect(() => {
+    if (sessionRestoredRef.current) return;
+    sessionRestoredRef.current = true;
+
     try {
       const savedUser = localStorage.getItem('cf_user');
       const savedToken = localStorage.getItem('cf_token');
@@ -151,12 +230,35 @@ export function AuthProvider({ children }) {
         if (parsed.role === 'owner' && parsed.ownedBusinessIds?.length) {
           setActiveBusinessId(parsed.ownedBusinessIds[0]);
         }
-        loadUserVault(savedToken);
+        // Pass token/user explicitly — do not rely on stale closure state
+        apiClient.getCards(savedToken).then((cards) => {
+          if (cards && Array.isArray(cards)) setSavedCards(cards);
+        });
+        apiClient.getMyBusinesses(savedToken).then((list) => {
+          if (list && Array.isArray(list) && list.length > 0) {
+            setMyBusinesses(list);
+            return;
+          }
+          try {
+            const cached = localStorage.getItem(`cf_biz_${parsed.phone}`);
+            if (cached) {
+              setMyBusinesses(JSON.parse(cached));
+              return;
+            }
+          } catch (e) {}
+          if (parsed.ownedBusinessIds?.length) {
+            setMyBusinesses(
+              mockBusinesses.filter(
+                (b) => parsed.ownedBusinessIds.includes(b.id) || b.ownerPhone === parsed.phone || b.ownerPhone === `+91${parsed.phone}`
+              )
+            );
+          }
+        }).catch(() => {});
       }
     } catch (e) {
       console.warn('Could not read session storage', e);
     }
-  }, [loadUserVault]);
+  }, []);
 
   const [lastSentOtp, setLastSentOtp] = useState('123456');
 
@@ -241,8 +343,9 @@ export function AuthProvider({ children }) {
       localStorage.setItem('cf_token', liveJwt);
     } catch (e) {}
 
-    // Load this user's vault
+    // Load this user's vault and businesses
     loadUserVault(liveJwt);
+    loadMyBusinesses(liveJwt, matchedAccount);
 
     setIsLoading(false);
     return { success: true, user: matchedAccount, isNewUser: isBrandNew };
@@ -252,18 +355,12 @@ export function AuthProvider({ children }) {
     const updatedUser = {
       ...user,
       name: profileData.name || 'CardFlow User',
-      city: profileData.city || 'Coimbatore',
-      state: profileData.state || 'Tamil Nadu',
-      dob: profileData.dob || '',
-      role: profileData.role || 'user',
-      isNewUser: false,
-      businessName: profileData.businessName || '',
-      category: profileData.category || 'General',
-      ownedBusinessIds: profileData.role === 'owner' ? ['biz-new-1'] : []
+      role: 'user',
+      isNewUser: false
     };
 
     setUser(updatedUser);
-    setRole(updatedUser.role);
+    setRole('user');
     setIsNewUser(false);
 
     try {
@@ -314,6 +411,7 @@ export function AuthProvider({ children }) {
     setPendingPhone('');
     setIsNewUser(false);
     setSavedCards([]);
+    setMyBusinesses([]);
     try {
       localStorage.removeItem('cf_user');
       localStorage.removeItem('cf_token');
@@ -368,9 +466,12 @@ export function AuthProvider({ children }) {
         lastSentOtp,
         activeBusinessId,
         savedCards,
+        myBusinesses,
         isBusinessSaved,
         saveBusinessToVault,
         loadUserVault,
+        loadMyBusinesses,
+        addMyBusiness,
         sendOtp,
         verifyOtp,
         completeOnboarding,

@@ -16,7 +16,6 @@ import {
   RotateCw,
   VideoOff,
   SwitchCamera,
-  Languages
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Button } from '../../components/Button';
@@ -25,9 +24,29 @@ import { Badge } from '../../components/Badge';
 import { Input } from '../../components/Input';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
-import { extractCardWithTesseract } from '../../utils/ocrParser';
+import { extractCardWithTesseract, mergeExtractions } from '../../utils/ocrParser';
+import { saveCardImage } from '../../utils/cardImageStore';
+import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 
-export function ScanCardScreen({ onCardSaved }) {
+function applyExtractionToForm(data, setters) {
+  if (!data) return;
+  const {
+    setExtractedData, setCompany, setPersonName, setDesignation,
+    setPhone, setEmail, setWebsite, setRawAddress, setGstin, setTags
+  } = setters;
+  setExtractedData(data);
+  setCompany(data.company || '');
+  setPersonName(data.person_name || '');
+  setDesignation(data.designation || '');
+  setPhone(data.phones?.[0]?.raw || '');
+  setEmail(data.emails?.[0] || '');
+  setWebsite((data.website || '').replace(/^https?:\/\//, ''));
+  setRawAddress(data.raw_address || '');
+  setGstin(data.gstin || '');
+  setTags(Array.isArray(data.tags) ? data.tags.join(', ') : 'Business Card');
+}
+
+export function ScanCardScreen({ onCardSaved, onBack }) {
   const { user, token, loadUserVault } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
@@ -59,6 +78,7 @@ export function ScanCardScreen({ onCardSaved }) {
   const [rawAddress, setRawAddress] = useState('');
   const [tags, setTags] = useState('');
   const [notes, setNotes] = useState('');
+  const [gstin, setGstin] = useState('');
 
   // Stop camera helper
   const stopCameraStream = () => {
@@ -247,40 +267,24 @@ export function ScanCardScreen({ onCardSaved }) {
     };
   }, []);
 
-  // Dynamic Multilingual OCR Extraction (English + Tamil + Hindi)
   const processScan = async (imageSource) => {
     setIsScanning(true);
-    setScanStatusText('Scanning with Multilingual AI OCR (English, Tamil, Hindi)...');
+    setScanStatusText('Reading your business card...');
     setSuccessMsg('');
 
-    try {
-      const ocrResult = await extractCardWithTesseract(imageSource);
-      console.log('✨ [OCR Result]:', ocrResult);
+    const setters = {
+      setExtractedData, setCompany, setPersonName, setDesignation,
+      setPhone, setEmail, setWebsite, setRawAddress, setGstin, setTags
+    };
 
-      if (ocrResult && (ocrResult.person_name || ocrResult.company || ocrResult.phones.length > 0 || ocrResult.emails.length > 0)) {
-        setExtractedData(ocrResult);
-        setCompany(ocrResult.company || '');
-        setPersonName(ocrResult.person_name || '');
-        setDesignation(ocrResult.designation || '');
-        setPhone(ocrResult.phones?.[0]?.raw || '');
-        setEmail(ocrResult.emails?.[0] || '');
-        setWebsite(ocrResult.website || '');
-        setRawAddress(ocrResult.raw_address || '');
-        setTags(ocrResult.tags ? ocrResult.tags.join(', ') : 'Verified Business');
-      } else {
-        const backendResult = await apiClient.scanCard('scanned-card.jpg', token);
-        if (backendResult) {
-          setExtractedData(backendResult);
-          setCompany(backendResult.company || '');
-          setPersonName(backendResult.person_name || '');
-          setDesignation(backendResult.designation || '');
-          setPhone(backendResult.phones?.[0]?.raw || '');
-          setEmail(backendResult.emails?.[0] || '');
-          setWebsite(backendResult.website || '');
-          setRawAddress(backendResult.raw_address || '');
-          setTags(backendResult.tags ? backendResult.tags.join(', ') : 'Business Card');
-        }
-      }
+    try {
+      const [ocrResult, backendResult] = await Promise.all([
+        extractCardWithTesseract(imageSource),
+        apiClient.scanCard('scanned-card.jpg', token).catch(() => null)
+      ]);
+      const merged = mergeExtractions(ocrResult, backendResult);
+      console.log('✨ [Merged OCR]:', merged);
+      applyExtractionToForm(merged, setters);
     } catch (err) {
       console.warn('OCR extraction error:', err);
     } finally {
@@ -301,8 +305,10 @@ export function ScanCardScreen({ onCardSaved }) {
       designation: designation,
       company: company,
       website: website,
+      gstin: gstin,
       notes: notes || 'Live visiting card scanned and verified in CardFlow',
       met_context: isDesktop ? 'Desktop Scanner / Upload' : 'Mobile Camera Scan',
+      original_card_image_url: selectedImage || '',
       phones: phone
         ? [
             {
@@ -319,6 +325,15 @@ export function ScanCardScreen({ onCardSaved }) {
     };
 
     const saved = await apiClient.saveCard(cardPayload, token);
+    const cardId = saved?.id || Date.now().toString();
+
+    if (selectedImage && saved?.id && !saved?.original_card_image_url) {
+      await apiClient.uploadCardOriginalImage(saved.id, selectedImage, token);
+    }
+
+    if (selectedImage && user?.phone) {
+      saveCardImage(user.phone, cardId, selectedImage);
+    }
     await loadUserVault(token);
 
     setIsSaving(false);
@@ -329,169 +344,149 @@ export function ScanCardScreen({ onCardSaved }) {
     }, 1200);
   };
 
+  const handleRetake = () => {
+    setSelectedImage(null);
+    setImageRotation(0);
+    setExtractedData(null);
+    setCompany('');
+    setPersonName('');
+    setDesignation('');
+    setPhone('');
+    setEmail('');
+    setWebsite('');
+    setRawAddress('');
+    setGstin('');
+    setTags('');
+    startCamera();
+  };
+
+  const isReview = Boolean(selectedImage);
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      {/* Hidden file input */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        accept="image/*"
-        style={{ display: 'none' }}
+    <View style={styles.root}>
+      <DetailScreenHeader
+        title={isReview ? 'Review Card' : 'Scan Card'}
+        subtitle={isReview ? 'Verify details before saving' : 'Capture or upload a visiting card'}
+        onBack={onBack}
       />
 
-      {/* Hidden Canvas for video frame extraction & rotation */}
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept="image/*"
+          style={{ display: 'none' }}
+        />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-      {/* Success Notification Banner */}
-      {successMsg ? (
-        <View style={styles.toastSuccess}>
-          <CheckCircle2 size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <Text style={styles.toastText}>{successMsg}</Text>
-        </View>
-      ) : null}
-
-      {/* Main Grid: Responsive Side-by-Side on Desktop, Stacked on Mobile */}
-      <View style={[styles.mainLayout, isDesktop && styles.desktopLayoutGrid]}>
-        {/* LEFT COLUMN: Camera Viewfinder */}
-        <View style={[styles.leftColumn, isDesktop && styles.desktopLeftColumn]}>
-          <View
-            style={[
-              styles.viewfinderFrame,
-              selectedImage && styles.viewfinderFrameWithImage,
-              isDragging && styles.viewfinderFrameDragging,
-              isDesktop && styles.desktopViewfinderFrame
-            ]}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            {/* 1. Live Video Stream View */}
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              autoPlay
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: isCameraActive ? 'block' : 'none',
-                borderRadius: 12
-              }}
-            />
-
-            {/* 2. Captured / Uploaded Image View (Flexible Portrait or Landscape) */}
-            {selectedImage && !isCameraActive ? (
-              <View style={styles.previewWrap}>
-                <img
-                  src={selectedImage}
-                  alt="Business Card"
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    objectFit: 'contain',
-                    borderRadius: 8
-                  }}
-                />
-                <View style={styles.previewActionsRow}>
-                  <TouchableOpacity
-                    style={styles.reUploadBtn}
-                    onPress={handleRotateImage}
-                    title="Rotate 90°"
-                  >
-                    <RotateCw size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={styles.reUploadText}>Rotate</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.reUploadBtn}
-                    onPress={() => startCamera()}
-                  >
-                    <Camera size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={styles.reUploadText}>Retake</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null}
-
-            {/* 3. Empty Idle State with Card Alignment Guides */}
-            {!selectedImage && !isCameraActive ? (
-              <View style={styles.alignmentGuide}>
-                <View style={styles.cornerTL} />
-                <View style={styles.cornerTR} />
-                <View style={styles.cornerBL} />
-                <View style={styles.cornerBR} />
-                <Camera size={38} color="#64748B" />
-                <Text style={styles.guideTitle}>
-                  {isDragging ? 'Drop Card Image Here' : 'Point Camera at Business Card'}
-                </Text>
-                <Text style={styles.guideSub}>
-                  {cameraError || (isDesktop ? 'Webcam / Drag & Drop' : 'Landscape or Portrait cards')}
-                </Text>
-                <View style={styles.langPill}>
-                  <Languages size={12} color="#94A3B8" style={{ marginRight: 4 }} />
-                  <Text style={styles.langPillText}>English • தமிழ் • हिन्दी</Text>
-                </View>
-              </View>
-            ) : null}
+        {successMsg ? (
+          <View style={styles.toastSuccess}>
+            <CheckCircle2 size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+            <Text style={styles.toastText}>{successMsg}</Text>
           </View>
+        ) : null}
 
-          {/* Action Controls for Camera and Upload */}
-          {isCameraActive ? (
-            <View style={styles.cameraControlsRow}>
-              <TouchableOpacity style={styles.flipBtn} onPress={toggleCameraFacing} title="Switch Camera">
-                <SwitchCamera size={20} color="#FFFFFF" />
-              </TouchableOpacity>
+        {/* Card preview — review mode shows large image; capture mode shows viewfinder */}
+        <View
+          style={[
+            styles.previewFrame,
+            isReview && styles.previewFrameReview,
+            isDragging && styles.previewFrameDragging
+          ]}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            autoPlay
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: isCameraActive ? 'block' : 'none',
+              borderRadius: 12
+            }}
+          />
 
-              <TouchableOpacity style={styles.captureCircleBtn} onPress={captureFromCamera} title="Capture Snapshot">
-                <View style={styles.captureInnerCircle} />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.closeCameraBtn} onPress={stopCameraStream} title="Close Camera">
-                <VideoOff size={20} color="#EF4444" />
-              </TouchableOpacity>
+          {selectedImage && !isCameraActive ? (
+            <View style={styles.previewWrap}>
+              <img src={selectedImage} alt="Business Card" style={styles.cardImage} />
+              <View style={styles.previewActionsRow}>
+                <TouchableOpacity style={styles.previewActionBtn} onPress={handleRotateImage}>
+                  <RotateCw size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.previewActionText}>Rotate</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.previewActionBtn} onPress={handleRetake}>
+                  <Camera size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.previewActionText}>Retake</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          ) : (
-            <View style={styles.scanActionsRow}>
-              <TouchableOpacity style={styles.openCameraBtn} onPress={() => startCamera()}>
-                <Camera size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.openCameraBtnText}>
-                  {isDesktop ? 'Open Desktop Webcam' : 'Open Live Camera'}
-                </Text>
-              </TouchableOpacity>
+          ) : null}
 
-              <TouchableOpacity
-                style={styles.uploadFileBtn}
-                onPress={() => fileInputRef.current && fileInputRef.current.click()}
-              >
-                <Upload size={16} color="#CBD5E1" style={{ marginRight: 8 }} />
-                <Text style={styles.uploadFileBtnText}>
-                  {isDesktop ? 'Browse File / Drop Image' : 'Choose from Gallery (Portrait / Landscape)'}
-                </Text>
-              </TouchableOpacity>
+          {!selectedImage && !isCameraActive ? (
+            <View style={styles.alignmentGuide}>
+              <View style={styles.cornerTL} />
+              <View style={styles.cornerTR} />
+              <View style={styles.cornerBL} />
+              <View style={styles.cornerBR} />
+              <Camera size={36} color={colors.primary} />
+              <Text style={styles.guideTitle}>
+                {isDragging ? 'Drop card image here' : 'Align business card in frame'}
+              </Text>
+              <Text style={styles.guideSub}>
+                {cameraError || 'Portrait or landscape — we read English text accurately'}
+              </Text>
             </View>
-          )}
-
-          {/* Dynamic AI OCR Progress Indicator */}
-          {isScanning && (
-            <Card style={styles.scanningCard}>
-              <Sparkles size={24} color={colors.primary} />
-              <Text style={styles.scanningTitle}>{scanStatusText}</Text>
-              <Text style={styles.scanningDesc}>Recognizing name, role, mobile, email, website and address in English, Tamil or Hindi</Text>
-            </Card>
-          )}
+          ) : null}
         </View>
 
-        {/* RIGHT COLUMN: Extracted Data Form for Review and Database Storage */}
-        <View style={[styles.rightColumn, isDesktop && styles.desktopRightColumn]}>
-          <Card style={styles.extractedCard}>
-            <View style={styles.extractedHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Sparkles size={18} color={colors.primary} style={{ marginRight: 6 }} />
-                <Text style={styles.extractedHeaderTitle}>CARD DETAILS (AUTO-FILLED & EDITABLE)</Text>
-              </View>
-              <Badge type="verified" label="Dynamic Multi-Script OCR" />
+        {isCameraActive ? (
+          <View style={styles.cameraControlsRow}>
+            <TouchableOpacity style={styles.flipBtn} onPress={toggleCameraFacing}>
+              <SwitchCamera size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.captureCircleBtn} onPress={captureFromCamera}>
+              <View style={styles.captureInnerCircle} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.closeCameraBtn} onPress={stopCameraStream}>
+              <VideoOff size={20} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
+        ) : !isReview ? (
+          <View style={styles.scanActionsRow}>
+            <TouchableOpacity style={styles.openCameraBtn} onPress={() => startCamera()}>
+              <Camera size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.openCameraBtnText}>Open Camera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.uploadFileBtn}
+              onPress={() => fileInputRef.current && fileInputRef.current.click()}
+            >
+              <Upload size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
+              <Text style={styles.uploadFileBtnText}>Upload from Gallery</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {isScanning && (
+          <Card style={styles.scanningCard}>
+            <Sparkles size={22} color={colors.primary} />
+            <Text style={styles.scanningTitle}>{scanStatusText}</Text>
+            <Text style={styles.scanningDesc}>Extracting company, phone, email, website and address…</Text>
+          </Card>
+        )}
+
+        {isReview && (
+          <Card style={styles.formCard}>
+            <View style={styles.formHeader}>
+              <Sparkles size={18} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={styles.formHeaderTitle}>Detected Information</Text>
+              <Badge type="verified" label="Review & Edit" />
             </View>
 
             <Input
@@ -499,49 +494,39 @@ export function ScanCardScreen({ onCardSaved }) {
               value={company}
               onChangeText={setCompany}
               leftIcon={Building}
-              placeholder="e.g. Enterprise / Company Name"
+              placeholder="e.g. LIPI TRADERS"
             />
 
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <View style={{ flex: 1 }}>
-                <Input
-                  label="CONTACT PERSON"
-                  value={personName}
-                  onChangeText={setPersonName}
-                  leftIcon={User}
-                  placeholder="e.g. Contact Person"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Input
-                  label="DESIGNATION"
-                  value={designation}
-                  onChangeText={setDesignation}
-                  placeholder="e.g. Managing Director / Partner"
-                />
-              </View>
-            </View>
+            <Input
+              label="CONTACT PERSON"
+              value={personName}
+              onChangeText={setPersonName}
+              leftIcon={User}
+              placeholder="e.g. Sivakumar"
+            />
 
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-              <View style={{ flex: 1 }}>
-                <Input
-                  label="PHONE / WHATSAPP *"
-                  value={phone}
-                  onChangeText={setPhone}
-                  leftIcon={Phone}
-                  placeholder="+91 98765 43210"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Input
-                  label="EMAIL ADDRESS"
-                  value={email}
-                  onChangeText={setEmail}
-                  leftIcon={Mail}
-                  placeholder="contact@company.com"
-                />
-              </View>
-            </View>
+            <Input
+              label="DESIGNATION"
+              value={designation}
+              onChangeText={setDesignation}
+              placeholder="e.g. Managing Partner"
+            />
+
+            <Input
+              label="PHONE / WHATSAPP *"
+              value={phone}
+              onChangeText={setPhone}
+              leftIcon={Phone}
+              placeholder="+91 96555 87877"
+            />
+
+            <Input
+              label="EMAIL ADDRESS"
+              value={email}
+              onChangeText={setEmail}
+              leftIcon={Mail}
+              placeholder="contact@company.com"
+            />
 
             <Input
               label="WEBSITE"
@@ -560,59 +545,48 @@ export function ScanCardScreen({ onCardSaved }) {
             />
 
             <Input
+              label="GSTIN"
+              value={gstin}
+              onChangeText={setGstin}
+              placeholder="33XXXXXXXXXXXXXX"
+            />
+
+            <Input
               label="TAGS / BUSINESS CATEGORIES"
               value={tags}
               onChangeText={setTags}
               leftIcon={Tag}
-              placeholder="e.g. Manufacturing, Supplier, Coimbatore"
+              placeholder="e.g. Manufacturing, Supplier"
             />
 
             <Button
-              title="Save Card to Live Database Vault"
+              title="Save Card"
               onPress={handleSaveToDatabase}
               loading={isSaving}
+              disabled={isScanning}
               icon={ArrowRight}
               size="lg"
-              style={styles.saveDbBtn}
+              style={styles.saveBtn}
             />
           </Card>
-        </View>
-      </View>
-    </ScrollView>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.bgMuted
+  },
   container: {
     flex: 1,
-    backgroundColor: '#0F172A'
+    backgroundColor: colors.bgMuted
   },
   scrollContent: {
     padding: spacing.md,
     paddingBottom: spacing.xxxl
-  },
-  mainLayout: {
-    flexDirection: 'column',
-    width: '100%'
-  },
-  desktopLayoutGrid: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-    alignItems: 'flex-start'
-  },
-  leftColumn: {
-    width: '100%'
-  },
-  desktopLeftColumn: {
-    flex: 1
-  },
-  rightColumn: {
-    width: '100%',
-    marginTop: spacing.sm
-  },
-  desktopRightColumn: {
-    flex: 1.2,
-    marginTop: 0
   },
   toastSuccess: {
     flexDirection: 'row',
@@ -627,243 +601,233 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 13
   },
-  viewfinderFrame: {
+  previewFrame: {
     width: '100%',
-    height: 200,
-    maxHeight: 220,
-    backgroundColor: '#1E293B',
-    borderRadius: radii.md,
+    minHeight: 220,
+    backgroundColor: '#1A1228',
+    borderRadius: radii.lg,
     borderWidth: 2,
-    borderColor: '#334155',
-    borderStyle: 'dashed',
+    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    marginBottom: spacing.sm
   },
-  viewfinderFrameWithImage: {
-    height: 240,
-    maxHeight: 280
+  previewFrameReview: {
+    minHeight: 280,
+    maxHeight: 360
   },
-  desktopViewfinderFrame: {
-    height: 260,
-    maxHeight: 300
-  },
-  viewfinderFrameDragging: {
+  previewFrameDragging: {
     borderColor: colors.primary,
-    backgroundColor: 'rgba(37, 99, 235, 0.1)'
+    backgroundColor: 'rgba(50, 20, 95, 0.08)'
   },
   previewWrap: {
     width: '100%',
     height: '100%',
+    minHeight: 280,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 6,
-    backgroundColor: '#0B1120'
+    padding: spacing.sm,
+    backgroundColor: '#1A1228'
+  },
+  cardImage: {
+    maxWidth: '100%',
+    maxHeight: 300,
+    objectFit: 'contain',
+    borderRadius: radii.md
   },
   previewActionsRow: {
     position: 'absolute',
-    bottom: 8,
+    bottom: 10,
     flexDirection: 'row',
     gap: 8
   },
-  reUploadBtn: {
-    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+  previewActionBtn: {
+    backgroundColor: 'rgba(50, 20, 95, 0.85)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radii.md
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.full
   },
-  reUploadText: {
+  previewActionText: {
     color: '#FFFFFF',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700'
   },
   alignmentGuide: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.md
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
+    minHeight: 220
   },
   guideTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
-    marginTop: 8
+    marginTop: spacing.sm,
+    textAlign: 'center',
+    fontFamily: typography.titleSmall.fontFamily
   },
   guideSub: {
-    color: '#94A3B8',
-    fontSize: 11,
+    color: '#C4BFD0',
+    fontSize: 12,
     textAlign: 'center',
-    marginTop: 2
-  },
-  langPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F172A',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radii.full,
-    marginTop: 6
-  },
-  langPillText: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '600'
+    marginTop: 4,
+    lineHeight: 18
   },
   cornerTL: {
     position: 'absolute',
-    top: 10,
-    left: 10,
-    width: 20,
-    height: 20,
+    top: 14,
+    left: 14,
+    width: 22,
+    height: 22,
     borderTopWidth: 2.5,
     borderLeftWidth: 2.5,
-    borderColor: colors.primary
+    borderColor: colors.gold
   },
   cornerTR: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 20,
-    height: 20,
+    top: 14,
+    right: 14,
+    width: 22,
+    height: 22,
     borderTopWidth: 2.5,
     borderRightWidth: 2.5,
-    borderColor: colors.primary
+    borderColor: colors.gold
   },
   cornerBL: {
     position: 'absolute',
-    bottom: 10,
-    left: 10,
-    width: 20,
-    height: 20,
+    bottom: 14,
+    left: 14,
+    width: 22,
+    height: 22,
     borderBottomWidth: 2.5,
     borderLeftWidth: 2.5,
-    borderColor: colors.primary
+    borderColor: colors.gold
   },
   cornerBR: {
     position: 'absolute',
-    bottom: 10,
-    right: 10,
-    width: 20,
-    height: 20,
+    bottom: 14,
+    right: 14,
+    width: 22,
+    height: 22,
     borderBottomWidth: 2.5,
     borderRightWidth: 2.5,
-    borderColor: colors.primary
+    borderColor: colors.gold
   },
   cameraControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.lg,
-    marginTop: spacing.sm
+    marginBottom: spacing.sm
   },
   captureCircleBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'transparent',
-    borderWidth: 3.5,
-    borderColor: '#FFFFFF',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 3,
+    borderColor: colors.primary,
     alignItems: 'center',
-    justifyContent: 'center'
-  },
-  captureInnerCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    justifyContent: 'center',
     backgroundColor: '#FFFFFF'
   },
+  captureInnerCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary
+  },
   flipBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#334155',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center'
   },
   closeCameraBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#334155',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center'
   },
   scanActionsRow: {
-    width: '100%',
-    flexDirection: 'column',
-    gap: 6,
-    marginTop: spacing.sm
+    gap: spacing.sm,
+    marginBottom: spacing.sm
   },
   openCameraBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primary,
-    paddingVertical: 12,
-    borderRadius: radii.md
+    paddingVertical: 14,
+    borderRadius: radii.lg
   },
   openCameraBtnText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700'
   },
   uploadFileBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#334155',
-    paddingVertical: 10,
-    borderRadius: radii.md
+    borderColor: colors.border,
+    paddingVertical: 13,
+    borderRadius: radii.lg
   },
   uploadFileBtnText: {
-    color: '#CBD5E1',
-    fontSize: 13,
+    color: colors.textPrimary,
+    fontSize: 14,
     fontWeight: '600'
   },
   scanningCard: {
-    backgroundColor: '#1E293B',
-    borderColor: '#334155',
+    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
     alignItems: 'center',
-    justifyContent: 'center',
     padding: spacing.lg,
-    marginTop: spacing.sm
+    marginBottom: spacing.sm
   },
   scanningTitle: {
-    color: '#FFFFFF',
+    color: colors.textPrimary,
     fontSize: 14,
     fontWeight: '700',
     marginTop: spacing.sm
   },
   scanningDesc: {
-    color: '#94A3B8',
-    fontSize: 11,
+    color: colors.textSecondary,
+    fontSize: 12,
     textAlign: 'center',
-    marginTop: 2
+    marginTop: 4
   },
-  extractedCard: {
+  formCard: {
     backgroundColor: '#FFFFFF',
     borderColor: colors.border,
     padding: spacing.md,
-    borderRadius: radii.md
+    borderRadius: radii.lg
   },
-  extractedHeader: {
+  formHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm
+    marginBottom: spacing.md,
+    gap: 6
   },
-  extractedHeaderTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.primary,
-    letterSpacing: 0.5
+  formHeaderTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontFamily: typography.titleSmall.fontFamily
   },
-  saveDbBtn: {
+  saveBtn: {
     marginTop: spacing.sm
   }
 });

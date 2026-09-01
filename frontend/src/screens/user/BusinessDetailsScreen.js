@@ -22,17 +22,23 @@ import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 import { useAuth } from '../../context/AuthContext';
 
 export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
   const { isBusinessSaved, saveBusinessToVault } = useAuth();
   const [showEnquiryModal, setShowEnquiryModal] = useState(false);
+  const [viewMode, setViewMode] = useState('digital');
   const [enquiryMessage, setEnquiryMessage] = useState('');
   const [sharePhone, setSharePhone] = useState(true);
   const [enquirySent, setEnquirySent] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   if (!business) return null;
+
+  const cardImageUrl = business.card_image_url || business.cardImageUrl;
+  const whatsappNumber = business.whatsapp || business.phone;
+  const showWhatsApp = !!(business.whatsapp || business.hasWhatsApp);
 
   const isSaved = isBusinessSaved(business);
 
@@ -69,7 +75,35 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
 
   return (
     <View style={styles.container}>
+      <DetailScreenHeader
+        title={business.name}
+        subtitle={business.category}
+        onBack={onBack}
+      />
+
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Digital / Original Card Toggle */}
+        <View style={styles.viewToggleRow}>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, viewMode === 'digital' && styles.viewToggleBtnActive]}
+            onPress={() => setViewMode('digital')}
+          >
+            <Text style={[styles.viewToggleText, viewMode === 'digital' && styles.viewToggleTextActive]}>Digital Card</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.viewToggleBtn, viewMode === 'original' && styles.viewToggleBtnActive]}
+            onPress={() => setViewMode('original')}
+          >
+            <Text style={[styles.viewToggleText, viewMode === 'original' && styles.viewToggleTextActive]}>Original</Text>
+          </TouchableOpacity>
+        </View>
+
+        {viewMode === 'original' && cardImageUrl ? (
+          <View style={styles.originalCardWrap}>
+            <img src={cardImageUrl} alt={`${business.name} business card`} style={styles.originalCardImg} />
+          </View>
+        ) : null}
+
         {/* Business Header Card */}
         <Card style={styles.profileHeaderCard}>
           {isSaved && (
@@ -102,12 +136,14 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
               <Text style={styles.actionLabel}>Call</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionCircleBtn} onPress={() => window.open(`https://wa.me/${business.phone}`)}>
+            {showWhatsApp ? (
+            <TouchableOpacity style={styles.actionCircleBtn} onPress={() => window.open(`https://wa.me/${whatsappNumber.replace(/[^0-9+]/g, '')}`)}>
               <View style={[styles.actionCircle, { backgroundColor: '#ECFDF5' }]}>
                 <MessageSquare size={18} color={colors.verifiedGst} />
               </View>
               <Text style={styles.actionLabel}>WhatsApp</Text>
             </TouchableOpacity>
+            ) : null}
 
             <TouchableOpacity
               style={styles.actionCircleBtn}
@@ -282,12 +318,39 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC'
+    backgroundColor: colors.bgMuted
   },
   scrollContent: {
     padding: spacing.md,
     paddingBottom: spacing.xxxl
   },
+  viewToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: colors.bgMuted,
+    borderRadius: radii.full,
+    padding: 4,
+    marginBottom: spacing.md
+  },
+  viewToggleBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: radii.full
+  },
+  viewToggleBtnActive: {
+    backgroundColor: '#FFFFFF',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+  },
+  viewToggleText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+  viewToggleTextActive: { color: colors.primary, fontWeight: '700' },
+  originalCardWrap: {
+    backgroundColor: '#0F172A',
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    alignItems: 'center'
+  },
+  originalCardImg: { maxWidth: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: radii.md },
   profileHeaderCard: {
     padding: spacing.lg,
     marginBottom: spacing.md,
@@ -339,9 +402,9 @@ const styles = StyleSheet.create({
   },
   gstin: {
     fontSize: 12,
-    color: colors.textSecondary,
+    color: colors.gold,
     marginLeft: spacing.sm,
-    fontFamily: 'monospace'
+    fontWeight: '600'
   },
   actionRow: {
     flexDirection: 'row',
@@ -391,7 +454,7 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   digitalBizName: {
-    color: colors.primary,
+    color: colors.gold,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 6
@@ -405,16 +468,17 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#334155',
     paddingTop: spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    flexDirection: 'column',
+    gap: 4
   },
   digitalCardPhone: {
-    color: '#94A3B8',
-    fontSize: 11
+    color: '#CBD5E1',
+    fontSize: 11,
+    flex: 1,
+    marginRight: spacing.sm
   },
   digitalCardUrl: {
-    color: colors.primary,
+    color: '#E2E8F0',
     fontSize: 11,
     fontWeight: '600'
   },
@@ -456,9 +520,9 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 13,
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     flex: 1,
-    lineHeight: 18
+    lineHeight: 20
   },
   trustRow: {
     flexDirection: 'row',

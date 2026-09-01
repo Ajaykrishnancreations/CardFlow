@@ -17,6 +17,31 @@ const getBaseUrl = () => {
 
 export const API_BASE_URL = getBaseUrl();
 
+/** Build full URL for API-relative paths like /api/v1/cards/{id}/original-image */
+export function resolveApiUrl(path) {
+  if (!path) return '';
+  if (path.startsWith('data:') || path.startsWith('blob:') || path.startsWith('http')) return path;
+  const origin = API_BASE_URL.replace(/\/api\/v1\/?$/, '');
+  return path.startsWith('/') ? `${origin}${path}` : `${API_BASE_URL}/${path}`;
+}
+
+/** Fetch authenticated original card image and return a blob URL for <img src> */
+export async function fetchCardOriginalImageUrl(imagePath, token) {
+  if (!imagePath || !token) return null;
+  if (imagePath.startsWith('data:') || imagePath.startsWith('blob:')) return imagePath;
+  const url = resolveApiUrl(imagePath);
+  if (!url.includes('/original-image')) return url;
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    console.warn('Could not load original card image', e);
+    return null;
+  }
+}
+
 // Normalizes 10-digit or raw numbers to E.164 (+91...)
 const formatE164 = (raw) => {
   if (!raw) return '';
@@ -124,9 +149,9 @@ export const apiClient = {
       person_name: 'Sivakumar',
       designation: 'Managing Partner',
       phones: [{ raw: '+91 96555 87877', e164: '+919655587877', type: 'mobile', is_whatsapp: true, confidence: 0.99 }],
-      emails: ['sivakumar@lipi-traders.com'],
-      website: 'http://lipi-traders.com',
-      raw_address: '214/1P, Ambigai nagar, Chinnavedapatti, Coimbatore, Tamil Nadu 641049',
+      emails: ['lipi.d.sivakumar@gmail.com'],
+      website: 'https://www.lipi-traders.com',
+      raw_address: '214/1P, Ambigai nagar, Chinnavedampatti, Coimbatore, Tamil Nadu 641049',
       tags: ['Iron', 'Scrap', 'Steel', 'Metals', 'Coimbatore'],
       confidences: { company: 0.99, person_name: 0.98, phones: 0.99 }
     };
@@ -134,7 +159,7 @@ export const apiClient = {
 
   // 6. Save Card to Vault
   async saveCard(cardData, token = '') {
-    console.log('📡 [API CALL] POST /cards', cardData);
+    console.log('📡 [API CALL] POST /cards', { ...cardData, original_card_image_url: cardData.original_card_image_url ? '[image]' : '' });
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -149,6 +174,24 @@ export const apiClient = {
     } catch (e) {
       console.warn('API /cards failed:', e);
       return cardData;
+    }
+  },
+
+  async uploadCardOriginalImage(cardId, imageData, token = '') {
+    console.log('📡 [API CALL] POST /cards/{id}/original-image', cardId);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/cards/${cardId}/original-image`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ image_data: imageData })
+      });
+      const data = await res.json();
+      return data.data || data;
+    } catch (e) {
+      console.warn('API upload original image failed:', e);
+      return null;
     }
   },
 
@@ -403,6 +446,52 @@ export const apiClient = {
       return data.data || data;
     } catch (e) {
       console.warn(`API /admin/support/tickets/${id} failed:`, e);
+      return null;
+    }
+  },
+
+  // 22. Owner: List My Businesses
+  async getMyBusinesses(token = '') {
+    console.log('📡 [API CALL] GET /owner/businesses');
+    try {
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/owner/businesses`, { headers });
+      const data = await res.json();
+      return data.data?.businesses || data.data || [];
+    } catch (e) {
+      console.warn('API /owner/businesses failed:', e);
+      return [];
+    }
+  },
+
+  // 23. Owner: Create Business
+  async createMyBusiness(payload, token = '') {
+    console.log('📡 [API CALL] POST /owner/businesses', payload);
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/owner/businesses`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: payload.business_name,
+          description: payload.category,
+          category_id: payload.category,
+          address_line1: payload.address,
+          city: payload.city,
+          district: payload.district,
+          state: payload.state,
+          phone: payload.phone,
+          email: payload.email,
+          website: payload.website,
+          gstin: payload.gstin
+        })
+      });
+      const data = await res.json();
+      return data.data || data;
+    } catch (e) {
+      console.warn('API /owner/businesses failed:', e);
       return null;
     }
   }

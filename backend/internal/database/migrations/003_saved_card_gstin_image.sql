@@ -1,0 +1,10 @@
+-- 003: GSTIN on saved_cards + image metadata
+ALTER TABLE saved_cards
+  ADD COLUMN IF NOT EXISTS gstin CHAR(15),
+  ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION,
+  ADD COLUMN IF NOT EXISTS source VARCHAR(30) DEFAULT 'SCANNED';
+
+CREATE INDEX IF NOT EXISTS idx_saved_cards_gstin ON saved_cards(gstin) WHERE gstin IS NOT NULL;
+
+COMMENT ON COLUMN saved_cards.source IS 'SCANNED | BUSINESS_PROFILE';

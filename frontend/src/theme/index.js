@@ -1,97 +1,119 @@
-// CardFlow Design System & Theme Tokens
+// CardFlow Royal Design System — matches cardflow-royal-connect.lovable.app
 
 export const colors = {
-  // Brand colors
-  primary: '#2563EB',       // Blue 600
-  primaryHover: '#1D4ED8',  // Blue 700
-  primaryLight: '#EFF6FF',  // Blue 50
-  primaryDark: '#1E40AF',   // Blue 800
+  primary: '#32145F',
+  primaryHover: '#28104D',
+  primaryLight: '#F3EDFA',
+  primaryMuted: 'rgba(50, 20, 95, 0.08)',
 
-  secondary: '#4F46E5',     // Indigo 600
-  secondaryLight: '#EEF2FF',
+  gold: '#B89445',
+  goldLight: '#F5EDD8',
 
-  accent: '#06B6D4',        // Cyan 500
+  secondary: '#32145F',
+  secondaryLight: '#F3EDFA',
 
-  // Trust & Verification colors
-  verifiedGst: '#059669',   // Emerald 600
-  verifiedGstBg: '#ECFDF5', // Emerald 50
-  verifiedId: '#0284C7',    // Sky 600
-  verifiedIdBg: '#F0F9FF',  // Sky 50
+  accent: '#32145F',
 
-  // Neutral palette
-  bgDark: '#0B1120',        // Slate 950
-  bgSurface: '#1E293B',     // Slate 800
+  verifiedGst: '#B89445',
+  verifiedGstBg: '#F5EDD8',
+  verifiedId: '#32145F',
+  verifiedIdBg: '#F3EDFA',
+
+  bgDark: '#17151A',
+  bgSurface: '#FFFFFF',
   bgCard: '#FFFFFF',
-  bgCardDark: '#1E293B',
-  bgMuted: '#F8FAFC',       // Slate 50
-  bgMutedDark: '#0F172A',   // Slate 900
-  border: '#E2E8F0',        // Slate 200
-  borderDark: '#334155',    // Slate 700
+  bgCardDark: '#FFFFFF',
+  bgMuted: '#FAFAF8',
+  bgMutedDark: '#F3F1F5',
+  border: '#E8E4EA',
+  borderDark: '#D5D0DA',
 
-  // Typography
-  textPrimary: '#0F172A',   // Slate 900
-  textSecondary: '#64748B', // Slate 500
-  textMuted: '#94A3B8',     // Slate 400
+  textPrimary: '#17151A',
+  textSecondary: '#77727D',
+  textMuted: '#9B959F',
   textWhite: '#FFFFFF',
 
-  // Feedback
-  success: '#10B981',
-  successLight: '#D1FAE5',
-  warning: '#F59E0B',
-  warningLight: '#FEF3C7',
-  danger: '#EF4444',
+  success: '#059669',
+  successLight: '#ECFDF5',
+  warning: '#B89445',
+  warningLight: '#F5EDD8',
+  danger: '#DC2626',
   dangerLight: '#FEE2E2',
-  info: '#3B82F6',
-  infoLight: '#DBEAFE'
+  info: '#32145F',
+  infoLight: '#F3EDFA'
+};
+
+export const fonts = {
+  serif: '"Playfair Display", Georgia, "Times New Roman", serif',
+  sans: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
 };
 
 export const typography = {
   titleLarge: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
-    lineHeight: 32,
-    color: colors.textPrimary
+    lineHeight: 36,
+    color: colors.textPrimary,
+    fontFamily: fonts.serif
   },
   titleMedium: {
-    fontSize: 20,
-    fontWeight: '600',
-    lineHeight: 28,
-    color: colors.textPrimary
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 30,
+    color: colors.textPrimary,
+    fontFamily: fonts.serif
   },
   titleSmall: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
-    lineHeight: 24,
-    color: colors.textPrimary
+    lineHeight: 26,
+    color: colors.textPrimary,
+    fontFamily: fonts.serif
   },
   bodyLarge: {
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 24,
-    color: colors.textSecondary
+    color: colors.textSecondary,
+    fontFamily: fonts.sans
   },
   bodyMedium: {
     fontSize: 14,
     fontWeight: '400',
     lineHeight: 20,
-    color: colors.textSecondary
+    color: colors.textSecondary,
+    fontFamily: fonts.sans
   },
   bodySmall: {
     fontSize: 12,
     fontWeight: '400',
     lineHeight: 16,
-    color: colors.textMuted
+    color: colors.textMuted,
+    fontFamily: fonts.sans
   },
   button: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    lineHeight: 20
+    lineHeight: 20,
+    fontFamily: fonts.sans
   },
   caption: {
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '600',
     lineHeight: 14,
-    color: colors.textMuted
+    color: colors.textMuted,
+    fontFamily: fonts.sans,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase'
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 14,
+    color: colors.textMuted,
+    fontFamily: fonts.sans,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase'
   }
 };
 
@@ -106,34 +128,41 @@ export const spacing = {
 };
 
 export const radii = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  full: 9999
+  xs: 6,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
+  pill: 9999
 };
 
 export const shadows = {
   sm: {
-    shadowColor: '#000',
+    shadowColor: '#32145F',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
     elevation: 2
   },
   md: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowColor: '#32145F',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowRadius: 12,
     elevation: 4
   },
   lg: {
-    shadowColor: '#000',
+    shadowColor: '#32145F',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
-    shadowRadius: 16,
+    shadowRadius: 24,
     elevation: 8
+  },
+  scan: {
+    shadowColor: '#32145F',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 20,
+    elevation: 10
   }
 };

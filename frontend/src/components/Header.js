@@ -77,22 +77,12 @@ export function Header({
       ];
     }
 
-    if (role === 'owner') {
-      return [
-        { id: 'owner_dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'owner_businesses', label: 'My Businesses', icon: Building2 },
-        { id: 'owner_enquiries', label: 'Enquiries', icon: Inbox },
-        { id: 'owner_analytics', label: 'Analytics', icon: BarChart3 },
-        { id: 'owner_profile', label: 'Profile', icon: User }
-      ];
-    }
-
     return [
-      { id: 'user_home', label: 'Explore', icon: Home },
-      { id: 'user_search', label: 'Directory Search', icon: Search },
-      { id: 'user_scan', label: 'Scan Card', icon: Camera, isPrimary: true },
-      { id: 'user_vault', label: 'Saved Cards Vault', icon: FolderOpen },
-      { id: 'user_profile', label: 'Profile', icon: User }
+      { id: 'user_dashboard', label: 'Dashboard', icon: Home },
+      { id: 'user_vault', label: 'My Cards', icon: FolderOpen },
+      { id: 'user_scan', label: 'Scan', icon: Camera, isPrimary: true },
+      { id: 'user_my_business', label: 'My Business', icon: Building2 },
+      { id: 'user_support', label: 'Support', icon: User }
     ];
   };
 
@@ -113,7 +103,7 @@ export function Header({
 
           {isDesktop ? (
             <TouchableOpacity
-              onPress={() => onSelectTab && onSelectTab(role === 'admin' ? 'admin_dashboard' : role === 'owner' ? 'owner_dashboard' : 'user_home')}
+              onPress={() => onSelectTab && onSelectTab(role === 'admin' ? 'admin_dashboard' : 'user_dashboard')}
               style={styles.desktopLogoRow}
               activeOpacity={0.8}
             >

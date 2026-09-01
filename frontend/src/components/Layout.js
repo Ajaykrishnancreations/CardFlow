@@ -10,12 +10,10 @@ export function Layout({ children, header, footer }) {
     <View style={styles.outerContainer}>
       <View style={[styles.mainWrapper, isDesktop ? styles.desktopWrapper : styles.mobileWrapper]}>
         {header}
-        <View style={[styles.contentArea, isDesktop && styles.desktopContentArea]}>
-          <View style={[styles.innerContainer, isDesktop && styles.desktopInnerContainer]}>
-            {children}
-          </View>
+        <View style={styles.contentArea}>
+          {children}
         </View>
-        {!isDesktop && footer}
+        {footer ? <View style={styles.footerSlot}>{footer}</View> : null}
       </View>
     </View>
   );
@@ -26,44 +24,36 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     height: '100%',
-    backgroundColor: '#0B1120', // Darker elegant backdrop for desktop canvas
+    backgroundColor: '#E8E4EA',
     alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden'
+    justifyContent: 'center'
   },
   mainWrapper: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.bgMuted,
     flexDirection: 'column',
     overflow: 'hidden'
   },
   mobileWrapper: {
-    maxWidth: 480,
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+    maxWidth: 430,
+    boxShadow: '0 20px 60px rgba(50, 20, 95, 0.12)'
   },
   desktopWrapper: {
-    maxWidth: '100%',
-    backgroundColor: '#0F172A'
+    maxWidth: 430,
+    borderRadius: 24,
+    overflow: 'hidden'
   },
   contentArea: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: colors.bgMuted,
     overflow: 'hidden',
     width: '100%',
-    alignItems: 'center'
+    minHeight: 0
   },
-  desktopContentArea: {
-    backgroundColor: '#0B1120'
-  },
-  innerContainer: {
+  footerSlot: {
     width: '100%',
-    height: '100%',
-    flex: 1
-  },
-  desktopInnerContainer: {
-    maxWidth: 1280,
-    width: '100%',
-    alignSelf: 'center'
+    zIndex: 50,
+    backgroundColor: '#FFFFFF'
   }
 });

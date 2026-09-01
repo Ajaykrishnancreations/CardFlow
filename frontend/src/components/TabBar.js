@@ -1,21 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import {
-  Home,
-  Search,
-  Camera,
-  FolderOpen,
-  User,
-  LayoutDashboard,
-  Building2,
-  Inbox,
-  BarChart3,
-  Users,
-  ShieldAlert,
-  Settings,
-  LifeBuoy
-} from 'lucide-react';
-import { colors, radii, spacing } from '../theme';
+import { ScanLine, FolderOpen, User, Store, Headphones, LayoutDashboard, Users, Building2, LifeBuoy } from 'lucide-react';
+import { colors, radii, spacing, shadows } from '../theme';
 import { useAuth } from '../context/AuthContext';
 
 export function TabBar({ currentTab, onSelectTab }) {
@@ -24,31 +10,18 @@ export function TabBar({ currentTab, onSelectTab }) {
   const getTabs = () => {
     if (role === 'admin') {
       return [
-        { id: 'admin_dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'admin_users', label: 'Users', icon: Users },
-        { id: 'admin_businesses', label: 'Listings', icon: Building2 },
-        { id: 'admin_kyc', label: 'KYC', icon: ShieldAlert },
+        { id: 'admin_dashboard', label: 'Overview', icon: LayoutDashboard },
+        { id: 'admin_users', label: 'People', icon: Users },
+        { id: 'admin_businesses', label: 'Businesses', icon: Building2 },
         { id: 'admin_support', label: 'Support', icon: LifeBuoy }
       ];
     }
-
-    if (role === 'owner') {
-      return [
-        { id: 'owner_dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'owner_businesses', label: 'My Businesses', icon: Building2 },
-        { id: 'owner_enquiries', label: 'Enquiries', icon: Inbox },
-        { id: 'owner_analytics', label: 'Analytics', icon: BarChart3 },
-        { id: 'owner_profile', label: 'Profile', icon: User }
-      ];
-    }
-
-    // Default: Normal User
     return [
-      { id: 'user_home', label: 'Home', icon: Home },
-      { id: 'user_search', label: 'Search', icon: Search },
-      { id: 'user_scan', label: 'Scan Card', icon: Camera, isCenter: true },
-      { id: 'user_vault', label: 'Saved Cards', icon: FolderOpen },
-      { id: 'user_profile', label: 'Profile', icon: User }
+      { id: 'user_profile', label: 'Profile', icon: User },
+      { id: 'user_vault', label: 'My Cards', icon: FolderOpen },
+      { id: 'user_scan', label: 'SCAN', icon: ScanLine, isCenter: true },
+      { id: 'user_my_business', label: 'My Business', icon: Store },
+      { id: 'user_support', label: 'Support', icon: Headphones }
     ];
   };
 
@@ -62,41 +35,19 @@ export function TabBar({ currentTab, onSelectTab }) {
 
         if (tab.isCenter) {
           return (
-            <TouchableOpacity
-              key={tab.id}
-              activeOpacity={0.85}
-              onPress={() => onSelectTab(tab.id)}
-              style={styles.centerTabContainer}
-            >
-              <View style={[styles.centerButton, isActive && styles.centerButtonActive]}>
-                <IconComponent size={22} color="#FFFFFF" />
+            <TouchableOpacity key={tab.id} activeOpacity={0.9} onPress={() => onSelectTab(tab.id)} style={styles.centerWrap}>
+              <View style={[styles.centerButton, shadows.scan]}>
+                <IconComponent size={22} color="#FFFFFF" strokeWidth={2} />
               </View>
-              <Text style={[styles.tabLabel, isActive && styles.tabLabelActive, { marginTop: 2 }]}>
-                {tab.label}
-              </Text>
+              <Text style={styles.centerLabel}>SCAN</Text>
             </TouchableOpacity>
           );
         }
 
         return (
-          <TouchableOpacity
-            key={tab.id}
-            activeOpacity={0.7}
-            onPress={() => onSelectTab(tab.id)}
-            style={styles.tabItem}
-          >
-            <IconComponent
-              size={20}
-              color={isActive ? colors.primary : colors.textMuted}
-            />
-            <Text
-              style={[
-                styles.tabLabel,
-                isActive && styles.tabLabelActive
-              ]}
-            >
-              {tab.label}
-            </Text>
+          <TouchableOpacity key={tab.id} activeOpacity={0.7} onPress={() => onSelectTab(tab.id)} style={styles.tabItem}>
+            <IconComponent size={20} color={isActive ? colors.primary : colors.textMuted} strokeWidth={isActive ? 2.2 : 1.75} />
+            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>{tab.label}</Text>
           </TouchableOpacity>
         );
       })}
@@ -107,52 +58,29 @@ export function TabBar({ currentTab, onSelectTab }) {
 const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-around',
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingVertical: 8,
+    paddingTop: 8,
+    paddingBottom: 14,
     paddingHorizontal: 4,
-    height: 64,
-    zIndex: 10
+    minHeight: 72
   },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4
-  },
-  tabLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: colors.textMuted,
-    marginTop: 3
-  },
-  tabLabelActive: {
-    color: colors.primary,
-    fontWeight: '700'
-  },
-  centerTabContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    top: -12
-  },
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 4 },
+  tabLabel: { fontSize: 10, fontWeight: '500', color: colors.textMuted, marginTop: 4 },
+  tabLabelActive: { color: colors.primary, fontWeight: '700' },
+  centerWrap: { alignItems: 'center', justifyContent: 'flex-end', flex: 1.15, marginTop: -22 },
   centerButton: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.full,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 6
+    borderWidth: 3,
+    borderColor: '#FFFFFF'
   },
-  centerButtonActive: {
-    backgroundColor: colors.primaryHover,
-    transform: [{ scale: 1.05 }]
-  }
+  centerLabel: { fontSize: 9, fontWeight: '800', color: colors.primary, marginTop: 4, letterSpacing: 0.5 }
 });

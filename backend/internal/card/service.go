@@ -2,6 +2,10 @@ package card
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,14 +22,17 @@ type CardService struct {
 	extractor   *extractor.GeminiService
 	vaultMutex  sync.RWMutex
 	memoryVault map[uuid.UUID][]domain.SavedCard
+	imageMutex  sync.RWMutex
+	memoryImages map[uuid.UUID][]byte
 }
 
 func NewCardService(db *database.DB, s3 *storage.S3Service, ext *extractor.GeminiService) *CardService {
 	return &CardService{
-		db:          db,
-		s3:          s3,
-		extractor:   ext,
-		memoryVault: make(map[uuid.UUID][]domain.SavedCard),
+		db:           db,
+		s3:           s3,
+		extractor:    ext,
+		memoryVault:  make(map[uuid.UUID][]domain.SavedCard),
+		memoryImages: make(map[uuid.UUID][]byte),
 	}
 }
 
@@ -37,7 +44,7 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 			SELECT id, user_id, COALESCE(person_name, ''), COALESCE(designation, ''), COALESCE(company, ''),
 			       COALESCE(website, ''), COALESCE(notes, ''), COALESCE(met_context, ''), COALESCE(private_rating, 5),
 			       COALESCE(contact_type::text, 'business'), COALESCE(extract_status::text, 'extracted'),
-			       created_at, updated_at
+			       COALESCE(gstin, ''), created_at, updated_at
 			FROM saved_cards
 			WHERE user_id = $1 AND deleted_at IS NULL
 			ORDER BY created_at DESC
@@ -46,18 +53,19 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 			defer rows.Close()
 			for rows.Next() {
 				var c domain.SavedCard
-				var contactType, extractStatus, website string
+				var contactType, extractStatus, website, gstinVal string
 				var rating int16
 
 				scanErr := rows.Scan(
 					&c.ID, &c.UserID, &c.PersonName, &c.Designation, &c.Company,
 					&website, &c.Notes, &c.MetContext, &rating, &contactType,
-					&extractStatus, &c.CreatedAt, &c.UpdatedAt,
+					&extractStatus, &gstinVal, &c.CreatedAt, &c.UpdatedAt,
 				)
 				if scanErr == nil {
 					if website != "" {
 						c.Website = &website
 					}
+					c.GSTIN = gstinVal
 					rInt := int(rating)
 					c.PrivateRating = &rInt
 					c.ContactType = contactType
@@ -109,6 +117,29 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 						tRows.Close()
 					}
 
+					// Fetch original card image
+					var imgKey string
+					_ = s.db.Pool.QueryRow(ctx, `
+						SELECT object_key FROM saved_card_images
+						WHERE saved_card_id = $1 AND side = 'front'
+						ORDER BY created_at DESC LIMIT 1
+					`, c.ID).Scan(&imgKey)
+					if imgKey != "" {
+						c.OriginalCardImageURL = originalImageAPIPath(c.ID.String())
+						c.FrontImageKey = &imgKey
+					}
+
+					// Parse GSTIN from notes if embedded
+					if c.Notes != "" && len(c.Notes) > 7 && c.Notes[:7] == "__GST__" {
+						parts := strings.SplitN(c.Notes, "\n", 2)
+						c.GSTIN = strings.TrimPrefix(parts[0], "__GST__:")
+						if len(parts) > 1 {
+							c.Notes = parts[1]
+						} else {
+							c.Notes = ""
+						}
+					}
+
 					cards = append(cards, c)
 				}
 			}
@@ -126,7 +157,14 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 	}
 
 	if len(memCards) > 0 {
-		return memCards, nil
+		out := make([]domain.SavedCard, len(memCards))
+		for i, c := range memCards {
+			out[i] = c
+			if s.hasOriginalImage(c.ID) {
+				out[i].OriginalCardImageURL = originalImageAPIPath(c.ID.String())
+			}
+		}
+		return out, nil
 	}
 
 	// Return empty non-nil slice
@@ -143,6 +181,21 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 	}
 	if card.ContactType == "" {
 		card.ContactType = "business"
+	}
+
+	notesToStore := card.Notes
+	if card.GSTIN != "" {
+		notesToStore = "__GST__:" + card.GSTIN + "\n" + notesToStore
+	}
+
+	var pendingImage []byte
+	var pendingContentType string
+	if strings.HasPrefix(card.OriginalCardImageURL, "data:") {
+		if raw, ct, err := decodeDataURL(card.OriginalCardImageURL); err == nil {
+			pendingImage = raw
+			pendingContentType = ct
+		}
+		card.OriginalCardImageURL = ""
 	}
 
 	// 1. Save to in-memory user vault
@@ -162,15 +215,16 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 		_, _ = s.db.Pool.Exec(ctx, `
 			INSERT INTO saved_cards (
 				id, user_id, person_name, designation, company, website,
-				notes, met_context, contact_type, extract_status
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'business', 'extracted')
+				notes, met_context, contact_type, extract_status, gstin, source
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'business', 'extracted', NULLIF($9, ''), 'SCANNED')
 			ON CONFLICT (id) DO UPDATE SET
 				person_name = EXCLUDED.person_name,
 				company = EXCLUDED.company,
 				designation = EXCLUDED.designation,
 				website = EXCLUDED.website,
-				notes = EXCLUDED.notes
-		`, card.ID, userID, card.PersonName, card.Designation, card.Company, card.Website, card.Notes, card.MetContext)
+				notes = EXCLUDED.notes,
+				gstin = EXCLUDED.gstin
+		`, card.ID, userID, card.PersonName, card.Designation, card.Company, card.Website, notesToStore, card.MetContext, card.GSTIN)
 
 		// Insert phone numbers
 		for _, p := range card.Phones {
@@ -201,9 +255,9 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 		for _, t := range card.Tags {
 			tagID := uuid.New()
 			_ = s.db.Pool.QueryRow(ctx, `
-				INSERT INTO tags (id, name, is_system) VALUES ($1, $2, false)
-				ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id
-			`, tagID, t).Scan(&tagID)
+				INSERT INTO tags (id, user_id, name, kind) VALUES ($1, $2, $3, 'custom')
+				ON CONFLICT (user_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id
+			`, tagID, userID, t).Scan(&tagID)
 
 			_, _ = s.db.Pool.Exec(ctx, `
 				INSERT INTO saved_card_tags (saved_card_id, tag_id) VALUES ($1, $2)
@@ -212,7 +266,131 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 		}
 	}
 
+	if len(pendingImage) > 0 {
+		_ = s.persistOriginalImage(ctx, userID, card.ID, pendingImage, pendingContentType)
+	}
+
+	if s.hasOriginalImage(card.ID) {
+		card.OriginalCardImageURL = originalImageAPIPath(card.ID.String())
+		s.vaultMutex.Lock()
+		for i := range s.memoryVault[userID] {
+			if s.memoryVault[userID][i].ID == card.ID {
+				s.memoryVault[userID][i].OriginalCardImageURL = card.OriginalCardImageURL
+				break
+			}
+		}
+		s.vaultMutex.Unlock()
+	}
+
 	return &card, nil
+}
+
+func (s *CardService) hasOriginalImage(cardID uuid.UUID) bool {
+	s.imageMutex.RLock()
+	_, ok := s.memoryImages[cardID]
+	s.imageMutex.RUnlock()
+	if ok {
+		return true
+	}
+	if s.db != nil && s.db.Pool != nil {
+		var exists bool
+		_ = s.db.Pool.QueryRow(context.Background(), `
+			SELECT EXISTS(SELECT 1 FROM saved_card_images WHERE saved_card_id = $1 AND side = 'front')
+		`, cardID).Scan(&exists)
+		if exists {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *CardService) persistOriginalImage(ctx context.Context, userID, cardID uuid.UUID, data []byte, contentType string) error {
+	if len(data) == 0 {
+		return fmt.Errorf("empty image")
+	}
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+
+	objectKey := imageObjectKey(userID.String(), cardID.String())
+
+	if s.s3 != nil {
+		if err := s.s3.PutObject(ctx, objectKey, data, contentType); err != nil {
+			return err
+		}
+	} else {
+		localPath := s.localImagePath(userID.String(), cardID.String())
+		if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(localPath, data, 0o644); err != nil {
+			return err
+		}
+	}
+
+	s.imageMutex.Lock()
+	s.memoryImages[cardID] = append([]byte(nil), data...)
+	s.imageMutex.Unlock()
+
+	if s.db != nil && s.db.Pool != nil {
+		_, _ = s.db.Pool.Exec(ctx, `
+			DELETE FROM saved_card_images WHERE saved_card_id = $1 AND side = 'front'
+		`, cardID)
+		_, _ = s.db.Pool.Exec(ctx, `
+			INSERT INTO saved_card_images (id, saved_card_id, side, object_key, bytes)
+			VALUES ($1, $2, 'front', $3, $4)
+		`, uuid.New(), cardID, objectKey, len(data))
+	}
+	return nil
+}
+
+func (s *CardService) GetOriginalImage(ctx context.Context, userID, cardID uuid.UUID) ([]byte, string, error) {
+	s.imageMutex.RLock()
+	if data, ok := s.memoryImages[cardID]; ok {
+		s.imageMutex.RUnlock()
+		return data, "image/jpeg", nil
+	}
+	s.imageMutex.RUnlock()
+
+	var objectKey string
+	if s.db != nil && s.db.Pool != nil {
+		_ = s.db.Pool.QueryRow(ctx, `
+			SELECT object_key FROM saved_card_images
+			WHERE saved_card_id = $1 AND side = 'front'
+			ORDER BY created_at DESC LIMIT 1
+		`, cardID).Scan(&objectKey)
+	}
+
+	if objectKey != "" && s.s3 != nil {
+		return s.s3.GetObject(ctx, objectKey)
+	}
+
+	localPath := s.localImagePath(userID.String(), cardID.String())
+	if data, err := os.ReadFile(localPath); err == nil && len(data) > 0 {
+		return data, "image/jpeg", nil
+	}
+
+	return nil, "", fmt.Errorf("image not found")
+}
+
+func (s *CardService) CardBelongsToUser(ctx context.Context, userID, cardID uuid.UUID) bool {
+	s.vaultMutex.RLock()
+	for _, c := range s.memoryVault[userID] {
+		if c.ID == cardID {
+			s.vaultMutex.RUnlock()
+			return true
+		}
+	}
+	s.vaultMutex.RUnlock()
+
+	if s.db != nil && s.db.Pool != nil {
+		var owner uuid.UUID
+		err := s.db.Pool.QueryRow(ctx, `
+			SELECT user_id FROM saved_cards WHERE id = $1 AND deleted_at IS NULL
+		`, cardID).Scan(&owner)
+		return err == nil && owner == userID
+	}
+	return false
 }
 
 func (s *CardService) ProcessOCR(ctx context.Context, userID uuid.UUID, imageKey string) (*extractor.ExtractedCardData, error) {

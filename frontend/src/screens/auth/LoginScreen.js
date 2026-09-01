@@ -1,321 +1,131 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Phone, ArrowRight, Shield, Briefcase, User, Sparkles } from 'lucide-react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { colors, radii, spacing, typography } from '../../theme';
-import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
-import { Card } from '../../components/Card';
+import { CardFlowLogo } from '../../components/CardFlowLogo';
 import { useAuth, DEV_TEST_ACCOUNTS } from '../../context/AuthContext';
 
-export function LoginScreen({ onOtpRequested }) {
+export function LoginScreen({ onOtpRequested, onAdminConsole }) {
   const { sendOtp, isLoading } = useAuth();
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
 
   const handleSendOtp = async (inputPhone) => {
     const targetPhone = (inputPhone || phone).trim();
-    if (!targetPhone) {
-      setError('Please enter your 10-digit mobile number');
+    if (!targetPhone || targetPhone.length < 10) {
+      setError('Enter a valid 10-digit mobile number');
       return;
     }
-    if (targetPhone.length < 10) {
-      setError('Mobile number must be 10 digits');
-      return;
-    }
-
     setError('');
     const res = await sendOtp(targetPhone);
-    if (res.success) {
-      onOtpRequested(targetPhone);
-    } else {
-      setError(res.error || 'Failed to send OTP');
-    }
-  };
-
-  const handleQuickSelect = (devAccount) => {
-    setPhone(devAccount.phone);
-    handleSendOtp(devAccount.phone);
+    if (res.success) onOtpRequested(targetPhone);
+    else setError(res.error || 'Failed to send OTP');
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-      <View style={styles.header}>
-        <Text style={styles.title}>Enter Phone Number</Text>
-        <Text style={styles.subtitle}>
-          We will send a 6-digit verification code to log in or create your account.
-        </Text>
+    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <View style={styles.logoWrap}>
+        <CardFlowLogo size={52} />
       </View>
 
-      {/* Phone Input */}
-      <View style={styles.inputContainer}>
-        <Input
-          label="MOBILE NUMBER"
-          placeholder="98765 43210"
+      <Text style={styles.title}>Welcome to CardFlow</Text>
+      <Text style={styles.subtitle}>Your business connections, all in one place.</Text>
+
+      <Text style={styles.label}>PHONE NUMBER</Text>
+      <View style={styles.phoneRow}>
+        <View style={styles.codeBox}>
+          <Text style={styles.codeText}>+91</Text>
+        </View>
+        <TextInput
           value={phone}
-          onChangeText={(text) => {
-            setPhone(text.replace(/[^0-9]/g, ''));
-            if (error) setError('');
-          }}
+          onChangeText={(t) => { setPhone(t.replace(/[^0-9]/g, '').slice(0, 10)); if (error) setError(''); }}
+          placeholder="00000 00000"
+          placeholderTextColor={colors.textMuted}
           keyboardType="numeric"
           maxLength={10}
-          leftIcon={Phone}
-          error={error}
-        />
-
-        <Button
-          title="Send OTP"
-          onPress={() => handleSendOtp()}
-          loading={isLoading}
-          icon={ArrowRight}
-          size="lg"
-          style={styles.sendButton}
+          style={styles.phoneInput}
         />
       </View>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {/* Registered Accounts Quick Select */}
-      <Card style={styles.devCard}>
-        <View style={styles.devHeader}>
-          <Sparkles size={16} color={colors.warning} />
-          <Text style={styles.devTitle}>CONFIGURED ACCOUNTS (1-TAP LOGIN)</Text>
-        </View>
-        <Text style={styles.devSubtitle}>
-          Select any registered admin, business owner, or user for instant test login:
-        </Text>
+      <Button title="Send OTP" onPress={() => handleSendOtp()} loading={isLoading} size="lg" style={styles.cta} />
 
-        {/* ADMIN ACCOUNTS */}
-        <Text style={styles.groupLabel}>ADMINISTRATORS</Text>
-        <View style={styles.accountsGrid}>
-          <TouchableOpacity
-            style={styles.accountOption}
-            activeOpacity={0.7}
-            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.ADMIN_AJAY)}
-          >
-            <View style={[styles.accountIcon, { backgroundColor: '#FEE2E2' }]}>
-              <Shield size={16} color={colors.danger} />
-            </View>
-            <View style={styles.accountText}>
-              <View style={styles.accountRow}>
-                <Text style={styles.accountRole}>Ajay (Admin)</Text>
-                <Text style={styles.accountPhone}>6382124970</Text>
-              </View>
-              <Text style={styles.accountDesc}>Full Admin Control, Manual Business & Grants</Text>
-            </View>
+      <TouchableOpacity onPress={onAdminConsole} style={styles.adminLink}>
+        <Text style={styles.adminText}>Admin console</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.legal}>
+        By continuing, you agree to{' '}
+        <Text style={styles.legalGold}>Terms</Text> &{' '}
+        <Text style={styles.legalGold}>Privacy Policy</Text>.
+      </Text>
+
+      {/* Dev quick login — collapsed at bottom */}
+      <View style={styles.devSection}>
+        <Text style={styles.devLabel}>Demo accounts · OTP 123456</Text>
+        {Object.values(DEV_TEST_ACCOUNTS).slice(0, 4).map((acc) => (
+          <TouchableOpacity key={acc.phone} style={styles.devChip} onPress={() => { setPhone(acc.phone); handleSendOtp(acc.phone); }}>
+            <Text style={styles.devChipText}>{acc.name} · {acc.phone}</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.accountOption}
-            activeOpacity={0.7}
-            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.ADMIN_GOVARDHAN)}
-          >
-            <View style={[styles.accountIcon, { backgroundColor: '#FEE2E2' }]}>
-              <Shield size={16} color={colors.danger} />
-            </View>
-            <View style={styles.accountText}>
-              <View style={styles.accountRow}>
-                <Text style={styles.accountRole}>Govardhan (Admin)</Text>
-                <Text style={styles.accountPhone}>9008722766</Text>
-              </View>
-              <Text style={styles.accountDesc}>Full Admin Control & Verification Queue</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* BUSINESS OWNERS */}
-        <Text style={styles.groupLabel}>BUSINESS OWNERS</Text>
-        <View style={styles.accountsGrid}>
-          <TouchableOpacity
-            style={styles.accountOption}
-            activeOpacity={0.7}
-            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.BUSINESS_OWNER_RAJ)}
-          >
-            <View style={[styles.accountIcon, { backgroundColor: '#EFF6FF' }]}>
-              <Briefcase size={16} color={colors.accentBlue} />
-            </View>
-            <View style={styles.accountText}>
-              <View style={styles.accountRow}>
-                <Text style={styles.accountRole}>Raj (Business Owner)</Text>
-                <Text style={styles.accountPhone}>7094310122</Text>
-              </View>
-              <Text style={styles.accountDesc}>Raj Engineering Works (1 Year Free Plan)</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.accountOption}
-            activeOpacity={0.7}
-            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.BUSINESS_OWNER_RASHIQ)}
-          >
-            <View style={[styles.accountIcon, { backgroundColor: '#EFF6FF' }]}>
-              <Briefcase size={16} color={colors.accentBlue} />
-            </View>
-            <View style={styles.accountText}>
-              <View style={styles.accountRow}>
-                <Text style={styles.accountRole}>Rashiq (Business Owner)</Text>
-                <Text style={styles.accountPhone}>9042938108</Text>
-              </View>
-              <Text style={styles.accountDesc}>Rashiq Trading & Logistics (6 Mo Free Plan)</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.accountOption}
-            activeOpacity={0.7}
-            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.BUSINESS_OWNER_SURESH)}
-          >
-            <View style={[styles.accountIcon, { backgroundColor: '#EFF6FF' }]}>
-              <Briefcase size={16} color={colors.accentBlue} />
-            </View>
-            <View style={styles.accountText}>
-              <View style={styles.accountRow}>
-                <Text style={styles.accountRole}>Suresh Natarajan</Text>
-                <Text style={styles.accountPhone}>9876543210</Text>
-              </View>
-              <Text style={styles.accountDesc}>Kovai Precision Tools & Apex Infotech</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        {/* NORMAL USERS */}
-        <Text style={styles.groupLabel}>NORMAL USERS (DISCOVERY & VAULT)</Text>
-        <View style={styles.accountsGrid}>
-          <TouchableOpacity
-            style={styles.accountOption}
-            activeOpacity={0.7}
-            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.NORMAL_USER_DHARANI)}
-          >
-            <View style={[styles.accountIcon, { backgroundColor: '#F1F5F9' }]}>
-              <User size={16} color={colors.textPrimary} />
-            </View>
-            <View style={styles.accountText}>
-              <View style={styles.accountRow}>
-                <Text style={styles.accountRole}>Dharani (User)</Text>
-                <Text style={styles.accountPhone}>9677840181</Text>
-              </View>
-              <Text style={styles.accountDesc}>Search, Digital Card Vault, Contact Leads</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.accountOption}
-            activeOpacity={0.7}
-            onPress={() => handleQuickSelect(DEV_TEST_ACCOUNTS.NORMAL_USER_RAVI)}
-          >
-            <View style={[styles.accountIcon, { backgroundColor: '#F1F5F9' }]}>
-              <User size={16} color={colors.textPrimary} />
-            </View>
-            <View style={styles.accountText}>
-              <View style={styles.accountRow}>
-                <Text style={styles.accountRole}>Ravi Kumar (User)</Text>
-                <Text style={styles.accountPhone}>1234567890</Text>
-              </View>
-              <Text style={styles.accountDesc}>Card Scanning & Discovery</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      </Card>
+        ))}
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: {
-    padding: spacing.lg,
-    backgroundColor: '#FFFFFF',
-    flexGrow: 1
+  container: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: 56,
+    paddingBottom: spacing.xxxl,
+    backgroundColor: colors.bgMuted,
+    alignItems: 'center'
   },
-  header: {
-    marginTop: spacing.xs,
-    marginBottom: spacing.lg
-  },
-  title: {
-    ...typography.titleLarge,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs
-  },
-  subtitle: {
-    ...typography.bodyMedium,
-    color: colors.textSecondary
-  },
-  inputContainer: {
-    marginBottom: spacing.lg
-  },
-  sendButton: {
-    marginTop: spacing.sm,
-    width: '100%'
-  },
-  devCard: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
-    marginTop: spacing.xs
-  },
-  devHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4
-  },
-  devTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginLeft: 6,
-    letterSpacing: 0.5
-  },
-  devSubtitle: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm
-  },
-  groupLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: colors.textSecondary,
-    letterSpacing: 0.5,
-    marginTop: spacing.xs,
-    marginBottom: 4
-  },
-  accountsGrid: {
-    marginBottom: spacing.xs
-  },
-  accountOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.sm,
-    backgroundColor: '#FFFFFF',
+  logoWrap: { marginBottom: spacing.xl },
+  title: { ...typography.titleLarge, textAlign: 'center', marginBottom: spacing.sm },
+  subtitle: { ...typography.bodyMedium, textAlign: 'center', marginBottom: spacing.xxxl, maxWidth: 280 },
+  label: { ...typography.label, alignSelf: 'flex-start', marginBottom: spacing.sm },
+  phoneRow: { flexDirection: 'row', width: '100%', gap: spacing.sm, marginBottom: spacing.md },
+  codeBox: {
+    width: 72,
+    height: 52,
+    borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radii.md,
-    marginBottom: 6,
-    cursor: 'pointer'
-  },
-  accountIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.sm,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.sm
+    justifyContent: 'center'
   },
-  accountText: {
-    flex: 1
+  codeText: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
+  phoneInput: {
+    flex: 1,
+    height: 52,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: spacing.lg,
+    fontSize: 16,
+    color: colors.textPrimary,
+    outlineStyle: 'none'
   },
-  accountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
+  error: { color: colors.danger, fontSize: 12, alignSelf: 'flex-start', marginBottom: spacing.sm },
+  cta: { marginTop: spacing.sm, width: '100%' },
+  adminLink: { marginTop: spacing.xl, paddingVertical: spacing.sm },
+  adminText: { fontSize: 14, color: colors.textSecondary, textDecorationLine: 'underline' },
+  legal: { marginTop: spacing.lg, fontSize: 12, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
+  legalGold: { color: colors.gold, fontWeight: '600' },
+  devSection: { marginTop: spacing.xxxl, width: '100%', opacity: 0.7 },
+  devLabel: { fontSize: 10, color: colors.textMuted, marginBottom: spacing.xs, textAlign: 'center' },
+  devChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 4,
+    backgroundColor: '#FFFFFF'
   },
-  accountRole: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textPrimary
-  },
-  accountPhone: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.primary
-  },
-  accountDesc: {
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 1
-  }
+  devChipText: { fontSize: 11, color: colors.textSecondary, textAlign: 'center' }
 });

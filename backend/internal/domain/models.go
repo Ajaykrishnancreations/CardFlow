@@ -137,8 +137,12 @@ type SavedCard struct {
 	Tags           []string   `json:"tags,omitempty"`
 	Phones         []CardPhone `json:"phones,omitempty"`
 	Emails         []string   `json:"emails,omitempty"`
-	FrontImageKey  *string    `json:"front_image_key,omitempty"`
-	BackImageKey   *string    `json:"back_image_key,omitempty"`
+	FrontImageKey          *string    `json:"front_image_key,omitempty"`
+	BackImageKey           *string    `json:"back_image_key,omitempty"`
+	OriginalCardImageURL   string     `json:"original_card_image_url,omitempty"`
+	GSTIN                  string     `json:"gstin,omitempty"`
+	Latitude               *float64   `json:"latitude,omitempty"`
+	Longitude              *float64   `json:"longitude,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
