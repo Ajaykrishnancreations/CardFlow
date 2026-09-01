@@ -171,21 +171,9 @@ export const apiClient = {
         return payload;
       }
     } catch (e) {
-      console.warn('API /cards/scan network error, using instant OCR engine:', e);
+      console.warn('API /cards/scan network error, using on-device OCR:', e);
     }
-
-    // High-precision fallback extraction ensuring full auto-fill
-    return {
-      company: 'LIPI TRADERS',
-      person_name: 'Sivakumar',
-      designation: 'Managing Partner',
-      phones: [{ raw: '+91 96555 87877', e164: '+919655587877', type: 'mobile', is_whatsapp: true, confidence: 0.99 }],
-      emails: ['lipi.d.sivakumar@gmail.com'],
-      website: 'https://www.lipi-traders.com',
-      raw_address: '214/1P, Ambigai nagar, Chinnavedampatti, Coimbatore, Tamil Nadu 641049',
-      tags: ['Iron', 'Scrap', 'Steel', 'Metals', 'Coimbatore'],
-      confidences: { company: 0.99, person_name: 0.98, phones: 0.99 }
-    };
+    return null;
   },
 
   // 6. Save Card to Vault

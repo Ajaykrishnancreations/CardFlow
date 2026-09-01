@@ -24,7 +24,7 @@ import { Badge } from '../../components/Badge';
 import { Input } from '../../components/Input';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
-import { extractCardWithTesseract, mergeExtractions } from '../../utils/ocrParser';
+import { extractCardWithTesseract } from '../../utils/ocrParser';
 import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 
 function applyExtractionToForm(data, setters) {
@@ -277,13 +277,9 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
     };
 
     try {
-      const [ocrResult, backendResult] = await Promise.all([
-        extractCardWithTesseract(imageSource),
-        apiClient.scanCard('scanned-card.jpg', token).catch(() => null)
-      ]);
-      const merged = mergeExtractions(ocrResult, backendResult);
-      console.log('✨ [Merged OCR]:', merged);
-      applyExtractionToForm(merged, setters);
+      const ocrResult = await extractCardWithTesseract(imageSource);
+      console.log('✨ [OCR Result]:', ocrResult);
+      applyExtractionToForm(ocrResult, setters);
     } catch (err) {
       console.warn('OCR extraction error:', err);
     } finally {

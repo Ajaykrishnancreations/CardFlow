@@ -66,7 +66,17 @@ func main() {
 	authSvc := auth.NewAuthService(dbPool, redisClient, jwtSvc, cfg)
 	discoverySvc := discovery.NewDiscoveryService(dbPool)
 	businessSvc := business.NewBusinessService(dbPool)
-	s3Svc, _ := storage.NewS3Service(context.Background(), cfg)
+	var s3Svc *storage.S3Service
+	if cfg.S3Enabled() {
+		svc, s3err := storage.NewS3Service(context.Background(), cfg)
+		if s3err != nil {
+			slog.Warn("S3 client not available; original images will store in PostgreSQL", "error", s3err)
+		} else {
+			s3Svc = svc
+		}
+	} else {
+		slog.Info("S3 disabled (localhost or unset); original card images persist in PostgreSQL")
+	}
 	geminiSvc := extractor.NewGeminiService(cfg)
 	cardSvc := card.NewCardService(dbPool, s3Svc, geminiSvc)
 

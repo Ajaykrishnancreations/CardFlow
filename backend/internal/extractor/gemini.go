@@ -58,47 +58,20 @@ func (g *GeminiService) ExtractCardFromImage(ctx context.Context, imageObjectKey
 	startTime := time.Now()
 	slog.Info("Running CardFlow Vision OCR Extractor", "imageKey", imageObjectKey)
 
-	time.Sleep(150 * time.Millisecond) // Realistic AI vision processing latency
+	time.Sleep(50 * time.Millisecond)
 	latency := int(time.Since(startTime).Milliseconds())
 
-	// Dynamic Extracted Business Card Result for LIPI TRADERS
 	return &ExtractedCardData{
-		PersonName:  "Sivakumar",
-		Designation: "Managing Partner",
-		Company:     "LIPI TRADERS",
-		Website:     "http://lipi-traders.com",
-		Phones: []ExtractedPhone{
-			{
-				Raw:        "+91 96555 87877",
-				E164:       "+919655587877",
-				Type:       "mobile",
-				Usage:      "whatsapp",
-				IsWhatsApp: true,
-				Confidence: 0.99,
-			},
-		},
-		Emails:     []string{"sivakumar@lipi-traders.com"},
-		RawAddress: "214/1P, Ambigai nagar, Chinnavedapatti, Coimbatore, Tamil Nadu 641049",
-		StructuredAddr: &StructuredAddress{
-			Building: "214/1P",
-			Street:   "Ambigai nagar",
-			Locality: "Chinnavedapatti",
-			City:     "Coimbatore",
-			District: "Coimbatore",
-			State:    "Tamil Nadu",
-			Pincode:  "641049",
-			Country:  "IN",
-		},
-		Tags: []string{"Iron", "Scrap", "Steel", "Metals", "Coimbatore"},
-		Confidences: map[string]float64{
-			"person_name": 0.98,
-			"designation": 0.95,
-			"company":     0.99,
-			"phones":      0.99,
-			"emails":      0.99,
-			"raw_address": 0.97,
-		},
-		LatencyMs: latency,
+		PersonName:  "",
+		Designation: "",
+		Company:     "",
+		Website:     "",
+		Phones:      []ExtractedPhone{},
+		Emails:      []string{},
+		RawAddress:  "",
+		Tags:        []string{},
+		Confidences: map[string]float64{},
+		LatencyMs:   latency,
 	}, nil
 }
 

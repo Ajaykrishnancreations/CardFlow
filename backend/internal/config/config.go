@@ -172,6 +172,18 @@ func (c *Config) IsProduction() bool {
 	return strings.ToLower(c.Env) == "production"
 }
 
+// S3Enabled is false when MinIO/S3 is unset or still pointing at local dev.
+func (c *Config) S3Enabled() bool {
+	ep := strings.ToLower(strings.TrimSpace(c.S3Endpoint))
+	if ep == "" {
+		return false
+	}
+	if strings.Contains(ep, "localhost") || strings.Contains(ep, "127.0.0.1") || strings.Contains(ep, "[::1]") {
+		return false
+	}
+	return true
+}
+
 func getEnv(key, fallback string) string {
 	if val, ok := os.LookupEnv(key); ok && val != "" {
 		return val

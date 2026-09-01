@@ -3,6 +3,7 @@ package card
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -326,23 +327,14 @@ func (s *CardService) persistOriginalImage(ctx context.Context, userID, cardID u
 
 	objectKey := imageObjectKey(userID.String(), cardID.String())
 
-	if s.s3 != nil {
-		if err := s.s3.PutObject(ctx, objectKey, data, contentType); err != nil {
-			return err
-		}
-	} else {
-		localPath := s.localImagePath(userID.String(), cardID.String())
-		if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(localPath, data, 0o644); err != nil {
-			return err
-		}
-	}
-
 	s.imageMutex.Lock()
 	s.memoryImages[cardID] = append([]byte(nil), data...)
 	s.imageMutex.Unlock()
+
+	localPath := s.localImagePath(userID.String(), cardID.String())
+	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err == nil {
+		_ = os.WriteFile(localPath, data, 0o644)
+	}
 
 	if s.db != nil && s.db.Pool != nil {
 		_, _ = s.db.Pool.Exec(ctx, `
@@ -353,7 +345,19 @@ func (s *CardService) persistOriginalImage(ctx context.Context, userID, cardID u
 			VALUES ($1, $2, 'front', $3, $4, $5, $6)
 		`, uuid.New(), cardID, objectKey, len(data), data, contentType)
 		if err != nil {
-			return fmt.Errorf("save image to database: %w", err)
+			_, err2 := s.db.Pool.Exec(ctx, `
+				INSERT INTO saved_card_images (id, saved_card_id, side, object_key, bytes)
+				VALUES ($1, $2, 'front', $3, $4)
+			`, uuid.New(), cardID, objectKey, len(data))
+			if err2 != nil {
+				return fmt.Errorf("save image to database: %w", err)
+			}
+		}
+	}
+
+	if s.s3 != nil {
+		if err := s.s3.PutObject(ctx, objectKey, data, contentType); err != nil {
+			slog.Warn("S3 put skipped; image already stored in database", "error", err)
 		}
 	}
 	return nil
@@ -384,7 +388,9 @@ func (s *CardService) GetOriginalImage(ctx context.Context, userID, cardID uuid.
 			return imageData, contentType, nil
 		}
 		if err == nil && objectKey != "" && s.s3 != nil {
-			return s.s3.GetObject(ctx, objectKey)
+			if bytes, ct, s3err := s.s3.GetObject(ctx, objectKey); s3err == nil && len(bytes) > 0 {
+				return bytes, ct, nil
+			}
 		}
 	}
 
