@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, radii, shadows, spacing } from '../theme';
+import { colors, radii, spacing } from '../theme';
 
 export function Card({ children, style, onPress, activeOpacity = 0.85 }) {
   if (onPress) {
@@ -21,11 +21,10 @@ export function Card({ children, style, onPress, activeOpacity = 0.85 }) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: radii.lg,
-    borderWidth: 1,
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     padding: spacing.lg,
-    marginBottom: spacing.md,
-    ...shadows.sm
+    marginBottom: spacing.md
   }
 });

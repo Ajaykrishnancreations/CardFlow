@@ -5,18 +5,16 @@ import {
   Search,
   Download,
   Phone,
-  Mail,
-  MapPin,
   RefreshCw,
   ChevronRight
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
-import { Card } from '../../components/Card';
-import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { BrandSpinner, SkeletonCard } from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
+import { CardThumbnail } from '../../components/CardThumbnail';
+import { buildVCardBook, downloadTextFile } from '../../utils/vcard';
 
 export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   const { user, token, savedCards: contextCards, loadUserVault } = useAuth();
@@ -27,6 +25,7 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [exportMsg, setExportMsg] = useState('');
 
   const filterTabs = [
     { id: 'all', label: 'All' },
@@ -38,24 +37,20 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   const formatCards = (cardList) => {
     if (!cardList || !Array.isArray(cardList)) return [];
     return cardList.map((c) => ({
-      id: c.id || Math.random().toString(),
-      personName: c.person_name || c.personName || 'Business Contact',
-      designation: c.designation || 'Partner',
-      company: c.company || 'Enterprise',
-      phones: c.phones || [{ raw: '+91 96555 87877', is_whatsapp: true }],
-      emails: c.emails || ['contact@enterprise.com'],
+      ...c,
+      id: c.id,
+      personName: c.person_name || c.personName || '',
+      designation: c.designation || '',
+      company: c.company || '',
+      phones: Array.isArray(c.phones) ? c.phones : [],
+      emails: Array.isArray(c.emails) ? c.emails : [],
       website: c.website || '',
-      rawAddress: c.raw_address || c.rawAddress || 'Coimbatore, Tamil Nadu',
-      notes: c.notes || '',
-      privateRating: c.private_rating || c.privateRating || 5,
-      tags: c.tags || ['Verified'],
+      rawAddress: c.raw_address || c.rawAddress || '',
       gstin: c.gstin || '',
       originalCardImageUrl: c.original_card_image_url || c.originalCardImageUrl || '',
-      savedAt: c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : '2026-08-31',
-      hasFrontImage: !!(c.original_card_image_url || c.originalCardImageUrl),
-      hasBackImage: false,
-      extractStatus: c.extract_status || c.extractStatus || 'extracted'
-    }));
+      originalBackImageUrl: c.original_back_image_url || c.originalBackImageUrl || '',
+      savedAt: c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : ''
+    })).filter((c) => c.id);
   };
 
   const loadCards = async () => {
@@ -116,41 +111,54 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   });
 
   const handleExportGoogle = () => {
-    alert(`${cards.length} contacts ready.\n\nGoogle Contacts export will open OAuth flow (coming in Phase 4).`);
+    if (!cards.length) {
+      setExportMsg('No contacts to export yet.');
+      return;
+    }
+    downloadTextFile('cardflow-google-contacts.vcf', buildVCardBook(cards));
+    setExportMsg(`${cards.length} contacts downloaded as vCard. In Google Contacts, use Import to add them. OAuth export is not configured on this build.`);
   };
 
-  const handleSaveToPhone = () => {
-    alert(`${cards.length} contacts selected.\n\nSave to phone contacts uses native Android API (coming in Phase 4).`);
+  const handleSaveToPhone = async () => {
+    if (!cards.length) {
+      setExportMsg('No contacts to export yet.');
+      return;
+    }
+    downloadTextFile('cardflow-phone-contacts.vcf', buildVCardBook(cards));
+    setExportMsg(`${cards.length} contacts downloaded as vCard. Open the file on your phone to save them to Contacts.`);
   };
 
   return (
     <View style={styles.container}>
-      {/* Count & Export Section */}
-      <View style={styles.exportSection}>
-        <Text style={styles.countTitle}>{cards.length} Saved Cards</Text>
-        <Text style={styles.exportLabel}>Backup & Export</Text>
-        <TouchableOpacity style={styles.exportRow} onPress={handleExportGoogle}>
-          <Download size={18} color={colors.primary} style={{ marginRight: spacing.sm }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.exportTitle}>Export to Google Contacts</Text>
-            <Text style={styles.exportDesc}>Save your business contacts to Google — recover anytime.</Text>
-          </View>
-          <ChevronRight size={18} color={colors.textMuted} />
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.exportRow, { borderBottomWidth: 0 }]} onPress={handleSaveToPhone}>
-          <Phone size={18} color={colors.primary} style={{ marginRight: spacing.sm }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.exportTitle}>Save to Phone Contacts</Text>
-            <Text style={styles.exportDesc}>Save selected or all contacts to your mobile.</Text>
-          </View>
-          <ChevronRight size={18} color={colors.textMuted} />
-        </TouchableOpacity>
+      <View style={styles.header}>
+        <Text style={styles.countTitle}>My Cards</Text>
+        <Text style={styles.countSub}>{cards.length} saved</Text>
       </View>
 
-      {/* Search Bar */}
+      <View style={styles.exportSection}>
+        <Text style={styles.exportLabel}>Backup & Export</Text>
+        <TouchableOpacity style={styles.exportRow} onPress={handleExportGoogle}>
+          <Download size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.exportTitle}>Export to Google Contacts</Text>
+            <Text style={styles.exportDesc}>Download vCard for Google Import</Text>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.exportRow} onPress={handleSaveToPhone}>
+          <Phone size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.exportTitle}>Save to Phone Contacts</Text>
+            <Text style={styles.exportDesc}>Download vCard for your phone</Text>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+        {exportMsg ? <Text style={styles.exportResult}>{exportMsg}</Text> : null}
+      </View>
+
       <View style={[styles.topBar, isDesktop && styles.desktopTopBar]}>
         <View style={styles.searchInputWrap}>
-          <Search size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
+          <Search size={16} color={colors.textSecondary} style={{ marginRight: spacing.sm }} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -159,13 +167,11 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
             style={styles.input}
           />
         </View>
-
-        <TouchableOpacity onPress={loadCards} style={styles.refreshBtn} title="Refresh">
-          <RefreshCw size={16} color={colors.primary} />
+        <TouchableOpacity onPress={loadCards} style={styles.refreshBtn}>
+          <RefreshCw size={15} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Filter Tabs */}
       <View style={styles.tagsFilterWrap}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScroll}>
           {filterTabs.map((tab) => (
@@ -182,63 +188,40 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
         </ScrollView>
       </View>
 
-      {/* Cards List or Animated Loader */}
       <ScrollView contentContainerStyle={[styles.cardsScroll, isDesktop && styles.desktopCardsScroll]} showsVerticalScrollIndicator={false}>
-        <View style={styles.resultsCountRow}>
-          <Text style={styles.resultsCountText}>
-            {isLoading
-              ? 'Loading your personal vault...'
-              : `${filteredCards.length} Cards in ${user?.name ? `${user.name}'s Vault` : 'Your Vault'}`}
-          </Text>
-        </View>
-
         {isLoading ? (
           <View style={styles.loadingContainer}>
-            <BrandSpinner size={32} text="Loading your saved cards..." />
+            <BrandSpinner size={28} text="Loading cards..." />
             <SkeletonCard count={isDesktop ? 4 : 2} />
           </View>
         ) : filteredCards.length === 0 ? (
           <EmptyState
             icon={FolderOpen}
-            title="No cards saved in your vault"
-            description="Scan or upload visiting cards, or save businesses from Discover to build your card vault."
-            actionTitle="Scan New Business Card"
-            onAction={onScanNewCard}
+            title="No cards yet"
+            description="Use the Scan button below to capture your first business card."
+            compact
           />
         ) : (
           <View style={[styles.cardsGrid, isDesktop && styles.desktopCardsGrid]}>
             {filteredCards.map((card) => (
-              <Card key={card.id} style={[styles.bizCardItem, isDesktop && styles.desktopCardItem]}>
-                <View style={styles.bizCardTop}>
-                  <View style={styles.bizCardAccent} />
-                  <Text style={styles.bizCardName}>{card.personName || 'Contact'}</Text>
-                  <Text style={styles.bizCardCompany}>{card.company}</Text>
-                </View>
-                <View style={styles.bizCardBody}>
-                  {card.phones?.[0]?.raw ? (
-                    <View style={styles.bizCardRow}>
-                      <Phone size={13} color={colors.primary} />
-                      <Text style={styles.bizCardText}>{card.phones[0].raw}</Text>
-                    </View>
-                  ) : null}
+              <TouchableOpacity
+                key={card.id}
+                style={[styles.bizCardItem, isDesktop && styles.desktopCardItem]}
+                onPress={() => onSelectCard?.(card)}
+                activeOpacity={0.85}
+              >
+                <CardThumbnail cardId={card.id} imagePath={card.originalCardImageUrl} size={72} />
+                <View style={{ flex: 1, marginLeft: spacing.md }}>
+                  <Text style={styles.bizCardName}>{card.personName || card.company || 'Contact'}</Text>
+                  {card.company ? <Text style={styles.bizCardCompany}>{card.company}</Text> : null}
+                  {card.designation ? <Text style={styles.bizCardRole}>{card.designation}</Text> : null}
                   {card.rawAddress ? (
-                    <View style={styles.bizCardRow}>
-                      <MapPin size={13} color={colors.textSecondary} />
-                      <Text style={styles.bizCardText} numberOfLines={1}>{card.rawAddress}</Text>
-                    </View>
+                    <Text style={styles.bizCardText} numberOfLines={1}>{card.rawAddress}</Text>
                   ) : null}
-                  {card.gstin ? (
-                    <Text style={styles.bizCardGst}>GST: {card.gstin}</Text>
-                  ) : null}
+                  {card.gstin ? <Text style={styles.bizCardGst}>GST {card.gstin}</Text> : null}
                 </View>
-                <TouchableOpacity
-                  style={styles.viewCardBtn}
-                  onPress={() => onSelectCard && onSelectCard(card)}
-                >
-                  <Text style={styles.viewCardBtnText}>View Card</Text>
-                  <ChevronRight size={16} color={colors.primary} />
-                </TouchableOpacity>
-              </Card>
+                <ChevronRight size={16} color={colors.textMuted} />
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -248,171 +231,91 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC'
-  },
-  exportSection: {
-    backgroundColor: '#FFFFFF',
+  container: { flex: 1, backgroundColor: colors.bgMuted },
+  header: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xs
   },
-  countTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.textPrimary,
-    marginBottom: spacing.sm
+  countTitle: { fontSize: 22, fontWeight: '700', color: colors.textPrimary, fontFamily: typography.titleMedium.fontFamily },
+  countSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  exportSection: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs
   },
   exportLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: colors.textMuted,
-    letterSpacing: 0.5,
-    marginBottom: spacing.xs,
+    letterSpacing: 0.7,
+    marginBottom: 4,
     textTransform: 'uppercase'
   },
   exportRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border
+    paddingVertical: 8
   },
-  exportTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
-  exportDesc: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  exportTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
+  exportDesc: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  exportResult: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 16 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border
+    paddingVertical: spacing.sm
   },
-  desktopTopBar: {
-    gap: spacing.md
-  },
+  desktopTopBar: { gap: spacing.md },
   searchInputWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgMuted,
-    borderRadius: radii.md,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.input,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     paddingHorizontal: spacing.md,
-    height: 44,
+    height: 40,
     marginRight: spacing.sm
   },
-  input: {
-    flex: 1,
-    fontSize: 14,
-    color: colors.textPrimary,
-    outlineStyle: 'none'
-  },
+  input: { flex: 1, fontSize: 14, color: colors.textPrimary, outlineStyle: 'none' },
   refreshBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.md,
+    width: 40,
+    height: 40,
+    borderRadius: radii.button,
     backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.xs
-  },
-  tagsFilterWrap: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border
-  },
-  tagsScroll: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: spacing.xs
-  },
-  tagFilterChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: radii.full,
-    backgroundColor: colors.bgMuted
-  },
-  tagFilterChipActive: {
-    backgroundColor: colors.primary
-  },
-  tagFilterText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary
-  },
-  tagFilterTextActive: {
-    color: '#FFFFFF'
-  },
-  cardsScroll: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxxl
-  },
-  desktopCardsScroll: {
-    padding: spacing.lg
-  },
-  resultsCountRow: {
-    marginBottom: spacing.sm
-  },
-  resultsCountText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary
-  },
-  loadingContainer: {
-    width: '100%',
     alignItems: 'center',
     justifyContent: 'center'
   },
-  cardsGrid: {
-    flexDirection: 'column',
-    gap: spacing.md
+  tagsFilterWrap: { paddingBottom: spacing.xs },
+  tagsScroll: { paddingHorizontal: spacing.lg, gap: 4 },
+  tagFilterChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: radii.tab
   },
-  desktopCardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md
-  },
-  desktopCardItem: {
-    width: 'calc(50% - 8px)',
-    marginBottom: 0
-  },
+  tagFilterChipActive: { backgroundColor: colors.primaryLight },
+  tagFilterText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
+  tagFilterTextActive: { color: colors.primary, fontWeight: '700' },
+  cardsScroll: { padding: spacing.lg, paddingBottom: spacing.xxxl },
+  desktopCardsScroll: { padding: spacing.lg },
+  loadingContainer: { width: '100%', alignItems: 'center' },
+  cardsGrid: { flexDirection: 'column', gap: spacing.sm },
+  desktopCardsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  desktopCardItem: { width: 'calc(50% - 8px)' },
   bizCardItem: {
-    padding: 0,
-    overflow: 'hidden',
-    borderRadius: radii.lg
-  },
-  bizCardTop: {
-    backgroundColor: colors.primary,
-    padding: spacing.md,
-    position: 'relative',
-    overflow: 'hidden'
-  },
-  bizCardAccent: {
-    position: 'absolute',
-    top: -20,
-    right: -20,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.15)'
-  },
-  bizCardName: { fontSize: 17, fontWeight: '800', color: '#FFFFFF' },
-  bizCardCompany: { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
-  bizCardBody: { padding: spacing.md, gap: 6 },
-  bizCardRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  bizCardText: { fontSize: 12, color: colors.textSecondary, flex: 1 },
-  bizCardGst: { fontSize: 11, fontWeight: '700', color: colors.primary, marginTop: 4 },
-  viewCardBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    gap: 4
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: spacing.md
   },
-  viewCardBtnText: { fontSize: 13, fontWeight: '700', color: colors.primary }
+  bizCardName: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
+  bizCardCompany: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  bizCardRole: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
+  bizCardText: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
+  bizCardGst: { fontSize: 11, fontWeight: '600', color: colors.gold, marginTop: 4 }
 });

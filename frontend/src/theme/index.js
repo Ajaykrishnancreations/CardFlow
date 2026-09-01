@@ -128,12 +128,20 @@ export const spacing = {
 };
 
 export const radii = {
-  xs: 6,
+  xs: 8,
   sm: 10,
   md: 14,
   lg: 18,
-  xl: 24,
-  pill: 9999
+  xl: 22,
+  pill: 9999,
+  // Semantic aliases — use these in screens
+  card: 18,
+  button: 14,
+  input: 14,
+  chip: 9999,
+  tab: 9999,
+  badge: 8,
+  modal: 20
 };
 
 export const shadows = {

@@ -22,11 +22,9 @@ func NewMiddleware(jwt *auth.JWTService, db *database.DB) *Middleware {
 	return &Middleware{jwt: jwt, db: db}
 }
 
-type contextKey string
-
-const (
-	UserContextKey contextKey = "user"
-)
+// UserContextKey must be a plain string (not a custom type) so handlers in
+// packages that cannot import middleware (e.g. auth) can read it via "user".
+const UserContextKey = "user"
 
 func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

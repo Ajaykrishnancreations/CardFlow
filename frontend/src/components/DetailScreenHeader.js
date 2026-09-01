@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Home } from 'lucide-react';
 import { colors, spacing, typography } from '../theme';
 
 /** Sticky mobile header with back navigation for detail / stack screens */
-export function DetailScreenHeader({ title, subtitle, onBack, rightAction }) {
+export function DetailScreenHeader({ title, subtitle, onBack, onHome, rightAction }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
@@ -25,7 +25,19 @@ export function DetailScreenHeader({ title, subtitle, onBack, rightAction }) {
             <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
           ) : null}
         </View>
-        <View style={styles.rightSlot}>{rightAction || null}</View>
+        <View style={styles.rightSlot}>
+          {rightAction || null}
+          {onHome ? (
+            <TouchableOpacity
+              onPress={onHome}
+              style={styles.homeBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Go home"
+            >
+              <Home size={18} color={colors.primary} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -34,11 +46,11 @@ export function DetailScreenHeader({ title, subtitle, onBack, rightAction }) {
 const styles = StyleSheet.create({
   wrap: {
     backgroundColor: colors.bgMuted,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xs,
+    paddingHorizontal: spacing.sm,
     zIndex: 20
   },
   row: {
@@ -47,23 +59,35 @@ const styles = StyleSheet.create({
     minHeight: 44
   },
   backBtn: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.xs
+    marginRight: 2
   },
   titleBlock: { flex: 1, justifyContent: 'center' },
   title: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.textPrimary,
     fontFamily: typography.titleSmall.fontFamily
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
-    marginTop: 1
+    marginTop: 0
   },
-  rightSlot: { width: 44, alignItems: 'flex-end', justifyContent: 'center' }
+  rightSlot: {
+    minWidth: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4
+  },
+  homeBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center'
+  }
 });

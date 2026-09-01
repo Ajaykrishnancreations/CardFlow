@@ -14,7 +14,9 @@ import {
   Phone,
   Mail,
   MapPin,
-  Save
+  Save,
+  Headphones,
+  Home
 } from 'lucide-react';
 import { colors, spacing, radii } from '../../theme';
 import { Card } from '../../components/Card';
@@ -30,7 +32,7 @@ function formatPhoneDisplay(phone) {
   return digits;
 }
 
-export function ProfileScreen({ onNavigate }) {
+export function ProfileScreen({ onNavigate, onBack }) {
   const { user, logout, myBusinesses, savedCards, updateProfile } = useAuth();
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -74,9 +76,11 @@ export function ProfileScreen({ onNavigate }) {
     {
       title: 'Quick Links',
       items: [
+        { icon: Home, label: 'Home', sub: 'Dashboard', action: () => onNavigate?.('user_dashboard') },
         { icon: Building2, label: 'My Businesses', sub: myBusinesses?.length ? `${myBusinesses.length} business${myBusinesses.length > 1 ? 'es' : ''}` : 'None yet', action: () => onNavigate?.('user_my_business') },
         { icon: CreditCard, label: 'Saved Cards', sub: savedCards?.length ? `${savedCards.length} cards` : 'None yet', action: () => onNavigate?.('user_vault') },
-        { icon: Download, label: 'Export & Backup', action: () => onNavigate?.('user_vault') }
+        { icon: Download, label: 'Export & Backup', action: () => onNavigate?.('user_vault') },
+        { icon: Headphones, label: 'Support', action: () => onNavigate?.('user_support') }
       ]
     },
     {
@@ -91,6 +95,11 @@ export function ProfileScreen({ onNavigate }) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {onBack ? (
+        <TouchableOpacity onPress={onBack} style={styles.backRow} accessibilityLabel="Back">
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+      ) : null}
       <Text style={styles.pageTitle}>My Profile</Text>
 
       {toast ? (
@@ -169,6 +178,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgMuted },
   scrollContent: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   pageTitle: { fontSize: 24, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.md },
+  backRow: { marginBottom: spacing.sm, alignSelf: 'flex-start', paddingVertical: 4 },
+  backText: { fontSize: 14, fontWeight: '600', color: colors.primary },
   toast: {
     backgroundColor: '#ECFDF5',
     borderRadius: radii.md,

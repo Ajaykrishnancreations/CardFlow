@@ -23,13 +23,15 @@ import { apiClient } from '../../services/api';
 export function AdminDashboardScreen({ onNavigate }) {
   const { token } = useAuth();
   const [stats, setStats] = useState({
-    total_users: 1420,
-    active_businesses: 480,
-    verified_businesses: 342,
-    pending_verifications: 12,
-    total_cards_scanned: 18540,
-    active_subscriptions: 184,
-    mrr_inr: 74200
+    total_users: 0,
+    total_people: 0,
+    business_members: 0,
+    active_businesses: 0,
+    total_businesses: 0,
+    verified_businesses: 0,
+    pending_verifications: 0,
+    total_cards_scanned: 0,
+    saved_cards: 0
   });
 
   useEffect(() => {
@@ -60,36 +62,36 @@ export function AdminDashboardScreen({ onNavigate }) {
           <View style={[styles.kpiIcon, { backgroundColor: '#EFF6FF' }]}>
             <Users size={20} color={colors.primary} />
           </View>
-          <Text style={styles.kpiValue}>{stats.total_users || 1420}</Text>
-          <Text style={styles.kpiLabel}>Total Users</Text>
-          <Text style={styles.kpiSub}>+48 this week</Text>
+          <Text style={styles.kpiValue}>{stats.total_people ?? stats.total_users ?? 0}</Text>
+          <Text style={styles.kpiLabel}>Total People</Text>
+          <Text style={styles.kpiSub}>{stats.business_members || 0} business members</Text>
         </Card>
 
         <Card style={styles.kpiCard} onPress={() => onNavigate('admin_businesses')}>
           <View style={[styles.kpiIcon, { backgroundColor: '#ECFDF5' }]}>
-            <Building2 size={20} color={colors.verifiedGst} />
+            <Building2 size={20} color={colors.gold} />
           </View>
-          <Text style={styles.kpiValue}>{stats.verified_businesses || 342}</Text>
-          <Text style={styles.kpiLabel}>Verified Listings</Text>
-          <Text style={styles.kpiSub}>Coimbatore launch</Text>
+          <Text style={styles.kpiValue}>{stats.total_businesses ?? stats.active_businesses ?? 0}</Text>
+          <Text style={styles.kpiLabel}>Total Businesses</Text>
+          <Text style={styles.kpiSub}>Separate from people count</Text>
         </Card>
 
         <Card style={styles.kpiCard} onPress={() => onNavigate('admin_kyc')}>
           <View style={[styles.kpiIcon, { backgroundColor: '#FEF3C7' }]}>
             <ShieldAlert size={20} color={colors.warning} />
           </View>
-          <Text style={styles.kpiValue}>{stats.pending_verifications || 12}</Text>
+          <Text style={styles.kpiValue}>{stats.pending_verifications || 0}</Text>
           <Text style={styles.kpiLabel}>Pending KYC</Text>
           <Text style={[styles.kpiSub, { color: colors.danger }]}>Requires review</Text>
         </Card>
 
         <Card style={styles.kpiCard}>
-          <View style={[styles.kpiIcon, { backgroundColor: '#F5F3FF' }]}>
-            <Camera size={20} color={colors.accentPurple} />
+          <View style={[styles.kpiIcon, { backgroundColor: colors.primaryLight }]}>
+            <Camera size={20} color={colors.primary} />
           </View>
-          <Text style={styles.kpiValue}>{stats.total_cards_scanned || 18540}</Text>
-          <Text style={styles.kpiLabel}>Scans Total</Text>
-          <Text style={styles.kpiSub}>AI extraction p50: 3.2s</Text>
+          <Text style={styles.kpiValue}>{stats.saved_cards ?? stats.total_cards_scanned ?? 0}</Text>
+          <Text style={styles.kpiLabel}>Saved Cards</Text>
+          <Text style={styles.kpiSub}>Persisted in vault</Text>
         </Card>
       </View>
 

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 func decodeDataURL(dataURL string) ([]byte, string, error) {
@@ -52,20 +54,40 @@ func decodeDataURL(dataURL string) ([]byte, string, error) {
 	return raw, contentType, nil
 }
 
-func imageObjectKey(userID, cardID string) string {
-	return fmt.Sprintf("cards/%s/original/%s.jpg", userID, cardID)
+func imageObjectKey(userID, cardID, side string) string {
+	if side == "" {
+		side = "front"
+	}
+	return fmt.Sprintf("cards/%s/original/%s-%s.jpg", userID, cardID, side)
 }
 
-func (s *CardService) localImagePath(userID, cardID string) string {
+func (s *CardService) localImagePath(userID, cardID, side string) string {
+	if side == "" {
+		side = "front"
+	}
 	base := os.Getenv("CARDFLOW_IMAGE_DIR")
 	if base == "" {
 		base = "data/card-images"
 	}
-	return filepath.Join(base, userID, cardID+".jpg")
+	return filepath.Join(base, userID, cardID+"-"+side+".jpg")
 }
 
-func originalImageAPIPath(cardID string) string {
-	return "/api/v1/cards/" + cardID + "/original-image"
+func originalImageAPIPath(cardID, side string) string {
+	if side == "" || side == "front" {
+		return "/api/v1/cards/" + cardID + "/original-image"
+	}
+	return "/api/v1/cards/" + cardID + "/original-image?side=" + side
+}
+
+func normalizeSide(side string) string {
+	if strings.ToLower(side) == "back" {
+		return "back"
+	}
+	return "front"
+}
+
+func imageMemKey(cardID uuid.UUID, side string) string {
+	return cardID.String() + ":" + normalizeSide(side)
 }
 
 func extFromContentType(ct string) string {

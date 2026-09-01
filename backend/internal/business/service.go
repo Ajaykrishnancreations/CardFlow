@@ -2,6 +2,7 @@ package business
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"strings"
 
@@ -30,11 +31,14 @@ type CreateBusinessInput struct {
 	Latitude        float64  `json:"latitude"`
 	Longitude       float64  `json:"longitude"`
 	Phone           string   `json:"phone"`
+	WhatsApp        string   `json:"whatsapp"`
 	Email           string   `json:"email"`
 	Website         string   `json:"website"`
 	GSTIN           string   `json:"gstin"`
 	Services        []string `json:"services"`
 	YearEstablished int      `json:"year_established"`
+	FrontImageData  string   `json:"front_image_data"`
+	BackImageData   string   `json:"back_image_data"`
 }
 
 func (s *BusinessService) GetOwnerBusinesses(ctx context.Context, ownerUserID uuid.UUID) ([]domain.Business, error) {
@@ -112,6 +116,8 @@ func (s *BusinessService) GetOwnerBusinesses(ctx context.Context, ownerUserID uu
 			b.Status = status
 			b.Verification = verif
 			b.Listing = list
+			b.CardImageURL = "/api/v1/owner/businesses/" + b.ID.String() + "/card-image?side=front"
+			b.CardBackImageURL = "/api/v1/owner/businesses/" + b.ID.String() + "/card-image?side=back"
 			b.ViewsCount = 120
 			b.EnquiriesCount = 8
 			businesses = append(businesses, b)
@@ -134,6 +140,19 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, ownerUserID uuid.U
 	if in.Latitude == 0 && in.Longitude == 0 {
 		in.Latitude = 11.0168
 		in.Longitude = 76.9558
+	}
+
+	if in.Pincode == "" {
+		in.Pincode = "000000"
+	}
+	if in.City == "" {
+		in.City = "Coimbatore"
+	}
+	if in.State == "" {
+		in.State = "Tamil Nadu"
+	}
+	if in.AddressLine1 == "" {
+		in.AddressLine1 = "Address pending"
 	}
 
 	if s.db != nil && s.db.Pool != nil {
@@ -170,9 +189,17 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, ownerUserID uuid.U
 				VALUES ($1, $2, TRUE, TRUE)
 			`, newID, in.Phone)
 		}
+		if in.WhatsApp != "" && in.WhatsApp != in.Phone {
+			_, _ = s.db.Pool.Exec(ctx, `
+				INSERT INTO business_phones (business_id, phone, is_whatsapp, otp_verified)
+				VALUES ($1, $2, TRUE, FALSE)
+			`, newID, in.WhatsApp)
+		}
+		_ = s.persistCardImage(ctx, newID, "front", in.FrontImageData)
+		_ = s.persistCardImage(ctx, newID, "back", in.BackImageData)
 	}
 
-	return &domain.Business{
+	biz := &domain.Business{
 		ID:                newID,
 		OwnerUserID:       ownerUserID,
 		Name:              in.Name,
@@ -188,7 +215,82 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, ownerUserID uuid.U
 		Listing:           "listed",
 		Completeness:      80,
 		Services:          in.Services,
-	}, nil
+	}
+	if in.FrontImageData != "" {
+		biz.CardImageURL = "/api/v1/owner/businesses/" + newID.String() + "/card-image?side=front"
+	}
+	if in.BackImageData != "" {
+		biz.CardBackImageURL = "/api/v1/owner/businesses/" + newID.String() + "/card-image?side=back"
+	}
+	return biz, nil
+}
+
+func decodeBizDataURL(dataURL string) ([]byte, string, error) {
+	if dataURL == "" {
+		return nil, "", errors.New("empty")
+	}
+	payload := dataURL
+	contentType := "image/jpeg"
+	if strings.HasPrefix(dataURL, "data:") {
+		parts := strings.SplitN(dataURL, ",", 2)
+		if len(parts) != 2 {
+			return nil, "", errors.New("invalid data url")
+		}
+		if strings.Contains(parts[0], "image/png") {
+			contentType = "image/png"
+		}
+		payload = parts[1]
+	}
+	raw, err := base64.StdEncoding.DecodeString(payload)
+	if err != nil {
+		return nil, "", err
+	}
+	return raw, contentType, nil
+}
+
+func (s *BusinessService) persistCardImage(ctx context.Context, businessID uuid.UUID, side, dataURL string) error {
+	if dataURL == "" || s.db == nil || s.db.Pool == nil {
+		return nil
+	}
+	raw, contentType, err := decodeBizDataURL(dataURL)
+	if err != nil || len(raw) == 0 {
+		return err
+	}
+	_, _ = s.db.Pool.Exec(ctx, `DELETE FROM business_card_images WHERE business_id = $1 AND side = $2`, businessID, side)
+	_, err = s.db.Pool.Exec(ctx, `
+		INSERT INTO business_card_images (id, business_id, side, image_data, content_type)
+		VALUES ($1, $2, $3, $4, $5)
+	`, uuid.New(), businessID, side, raw, contentType)
+	return err
+}
+
+func (s *BusinessService) GetCardImage(ctx context.Context, userID, businessID uuid.UUID, side string) ([]byte, string, error) {
+	if s.db == nil || s.db.Pool == nil {
+		return nil, "", errors.New("image not found")
+	}
+	var owner uuid.UUID
+	var listing string
+	err := s.db.Pool.QueryRow(ctx, `SELECT owner_user_id, listing::text FROM businesses WHERE id = $1 AND deleted_at IS NULL`, businessID).Scan(&owner, &listing)
+	if err != nil {
+		return nil, "", errors.New("image not found")
+	}
+	if owner != userID && listing != "listed" {
+		return nil, "", errors.New("image not found")
+	}
+	if side != "back" {
+		side = "front"
+	}
+	var data []byte
+	var ct string
+	err = s.db.Pool.QueryRow(ctx, `
+		SELECT image_data, COALESCE(NULLIF(content_type, ''), 'image/jpeg')
+		FROM business_card_images WHERE business_id = $1 AND side = $2
+		ORDER BY created_at DESC LIMIT 1
+	`, businessID, side).Scan(&data, &ct)
+	if err != nil || len(data) == 0 {
+		return nil, "", errors.New("image not found")
+	}
+	return data, ct, nil
 }
 
 func (s *BusinessService) VerifyOwnerAccess(ctx context.Context, ownerUserID, businessID uuid.UUID) error {
@@ -204,4 +306,82 @@ func (s *BusinessService) VerifyOwnerAccess(ctx context.Context, ownerUserID, bu
 		return errors.New("access denied: you do not own this business")
 	}
 	return nil
+}
+
+// UpdateBusiness lets the owner edit listing fields and optionally replace card images.
+func (s *BusinessService) UpdateBusiness(ctx context.Context, ownerUserID, businessID uuid.UUID, in CreateBusinessInput) (*domain.Business, error) {
+	if err := s.VerifyOwnerAccess(ctx, ownerUserID, businessID); err != nil {
+		return nil, err
+	}
+
+	if s.db != nil && s.db.Pool != nil {
+		_, err := s.db.Pool.Exec(ctx, `
+			UPDATE businesses SET
+				name = COALESCE(NULLIF($2, ''), name),
+				description = COALESCE(NULLIF($3, ''), description),
+				address_line1 = COALESCE(NULLIF($4, ''), address_line1),
+				locality = COALESCE(NULLIF($5, ''), locality),
+				city = COALESCE(NULLIF($6, ''), city),
+				state = COALESCE(NULLIF($7, ''), state),
+				pincode = COALESCE(NULLIF($8, ''), pincode),
+				website = COALESCE(NULLIF($9, ''), website),
+				email = COALESCE(NULLIF($10, ''), email),
+				gstin = COALESCE(NULLIF($11, ''), gstin),
+				updated_at = NOW()
+			WHERE id = $1 AND owner_user_id = $12
+		`, businessID, in.Name, in.Description, in.AddressLine1, in.Locality,
+			in.City, in.State, in.Pincode, in.Website, in.Email, in.GSTIN, ownerUserID)
+		if err != nil {
+			return nil, err
+		}
+
+		if in.Phone != "" {
+			_, _ = s.db.Pool.Exec(ctx, `DELETE FROM business_phones WHERE business_id = $1`, businessID)
+			_, _ = s.db.Pool.Exec(ctx, `
+				INSERT INTO business_phones (business_id, phone, is_whatsapp, otp_verified)
+				VALUES ($1, $2, TRUE, TRUE)
+			`, businessID, in.Phone)
+			if in.WhatsApp != "" && in.WhatsApp != in.Phone {
+				_, _ = s.db.Pool.Exec(ctx, `
+					INSERT INTO business_phones (business_id, phone, is_whatsapp, otp_verified)
+					VALUES ($1, $2, TRUE, FALSE)
+				`, businessID, in.WhatsApp)
+			}
+		}
+
+		_ = s.persistCardImage(ctx, businessID, "front", in.FrontImageData)
+		_ = s.persistCardImage(ctx, businessID, "back", in.BackImageData)
+	}
+
+	biz := &domain.Business{
+		ID:           businessID,
+		OwnerUserID:  ownerUserID,
+		Name:         in.Name,
+		Description:  in.Description,
+		AddressLine1: in.AddressLine1,
+		City:         in.City,
+		State:        in.State,
+		Pincode:      in.Pincode,
+		Status:       "live",
+		Verification: "pending",
+		Listing:      "listed",
+		Services:     in.Services,
+	}
+	biz.CardImageURL = "/api/v1/owner/businesses/" + businessID.String() + "/card-image?side=front"
+	biz.CardBackImageURL = "/api/v1/owner/businesses/" + businessID.String() + "/card-image?side=back"
+	return biz, nil
+}
+
+// UploadCardImage replaces one side of the owner's original business card image.
+func (s *BusinessService) UploadCardImage(ctx context.Context, ownerUserID, businessID uuid.UUID, side, dataURL string) error {
+	if err := s.VerifyOwnerAccess(ctx, ownerUserID, businessID); err != nil {
+		return err
+	}
+	if side != "back" {
+		side = "front"
+	}
+	if dataURL == "" {
+		return errors.New("image data required")
+	}
+	return s.persistCardImage(ctx, businessID, side, dataURL)
 }

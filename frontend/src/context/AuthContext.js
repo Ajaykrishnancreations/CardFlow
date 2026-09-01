@@ -179,37 +179,72 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const addMyBusiness = useCallback(async (bizData) => {
+    const created = await apiClient.createMyBusiness(bizData, token);
     const newBiz = {
-      id: 'biz-' + Date.now(),
-      name: bizData.business_name,
-      business_name: bizData.business_name,
+      ...created,
+      id: created?.id || created?.ID,
+      name: created?.name || bizData.business_name,
+      business_name: created?.name || bizData.business_name,
       category: bizData.category,
-      city: bizData.city,
+      city: created?.city || bizData.city,
       district: bizData.district,
-      state: bizData.state,
-      address: bizData.address,
+      state: created?.state || bizData.state,
+      address: created?.address_line1 || bizData.address,
       phone: bizData.phone,
       whatsapp: bizData.whatsapp,
       email: bizData.email,
       website: bizData.website,
       gstin: bizData.gstin,
-      verification: 'pending',
-      status: 'live'
+      verification: created?.verification || 'pending',
+      status: created?.status || 'live',
+      card_image_url: bizData.front_image_data || '',
+      card_back_image_url: bizData.back_image_data || ''
     };
-    try {
-      await apiClient.createMyBusiness(bizData, token);
-    } catch (e) {
-      console.warn('API create business failed, saving locally', e);
-    }
     setMyBusinesses((prev) => {
       const updated = [newBiz, ...prev];
       try {
-        localStorage.setItem(`cf_biz_${user?.phone}`, JSON.stringify(updated));
+        localStorage.setItem(`cf_biz_${user?.phone}`, JSON.stringify(updated.map((b) => ({
+          ...b,
+          card_image_url: b.card_image_url ? '[stored]' : '',
+          card_back_image_url: b.card_back_image_url ? '[stored]' : '',
+          front_image_data: undefined,
+          back_image_data: undefined
+        }))));
       } catch (e) {}
       return updated;
     });
     return newBiz;
   }, [token, user]);
+
+  const updateMyBusiness = useCallback(async (bizId, bizData) => {
+    const updated = await apiClient.updateMyBusiness(bizId, bizData, token);
+    const next = {
+      id: bizId,
+      ...updated,
+      name: updated?.name || bizData.business_name || bizData.name,
+      business_name: updated?.name || bizData.business_name || bizData.name,
+      category: bizData.category,
+      city: updated?.city || bizData.city,
+      state: updated?.state || bizData.state,
+      address: updated?.address_line1 || bizData.address,
+      phone: bizData.phone,
+      whatsapp: bizData.whatsapp,
+      email: bizData.email,
+      website: bizData.website,
+      gstin: bizData.gstin,
+      description: bizData.description,
+      services: Array.isArray(bizData.services) ? bizData.services : (bizData.services || '').split(',').map((s) => s.trim()).filter(Boolean),
+      verification: updated?.verification || 'pending',
+      card_image_url: bizData.front_image_data
+        ? `/api/v1/owner/businesses/${bizId}/card-image?side=front`
+        : undefined,
+      card_back_image_url: bizData.back_image_data
+        ? `/api/v1/owner/businesses/${bizId}/card-image?side=back`
+        : undefined
+    };
+    setMyBusinesses((prev) => prev.map((b) => (String(b.id) === String(bizId) ? { ...b, ...next } : b)));
+    return next;
+  }, [token]);
 
   const sessionRestoredRef = useRef(false);
 
@@ -265,93 +300,119 @@ export function AuthProvider({ children }) {
   const sendOtp = async (phone) => {
     setIsLoading(true);
     setPendingPhone(phone);
-    const res = await apiClient.sendOtp(phone);
-    const code = res?.data?.otp_preview || res?.otp_preview || (Object.values(DEV_TEST_ACCOUNTS).some(a => a.phone === phone) ? '123456' : '123456');
-    setLastSentOtp(code || '123456');
-    setIsLoading(false);
-    return { success: true, message: `OTP sent successfully (Code: ${code || '123456'})`, otpPreview: code };
+    try {
+      const res = await apiClient.sendOtp(phone);
+      if (res?.status === 'error' || res?.error) {
+        setIsLoading(false);
+        return {
+          success: false,
+          error: res?.error?.message || res?.error || "Couldn't send OTP. Please try again."
+        };
+      }
+      const code = res?.data?.otp_preview || res?.otp_preview || '123456';
+      setLastSentOtp(code || '123456');
+      setIsLoading(false);
+      return { success: true, message: 'OTP sent successfully' };
+    } catch (e) {
+      setIsLoading(false);
+      return { success: false, error: "Couldn't send OTP. Please try again." };
+    }
   };
 
-  const verifyOtp = async (phone, enteredOtp) => {
+  const verifyOtp = async (phone, enteredOtp, options = {}) => {
     setIsLoading(true);
-    const apiRes = await apiClient.verifyOtp(phone, enteredOtp);
+    try {
+      const apiRes = await apiClient.verifyOtp(phone, enteredOtp);
+      const errMsg = apiRes?.error?.message || apiRes?.error || null;
+      const hasToken = !!(apiRes?.data?.access_token || apiRes?.access_token || apiRes?.data?.user || apiRes?.user);
+      if (!apiRes || apiRes.status === 'error' || (errMsg && !hasToken)) {
+        setIsLoading(false);
+        return {
+          success: false,
+          error: typeof errMsg === 'string' ? errMsg : 'Invalid OTP. Please check the code and try again.'
+        };
+      }
 
-    // Match against development test accounts
-    let matchedAccount = null;
-    let isBrandNew = false;
+      // Match against development test accounts
+      let matchedAccount = null;
+      let isBrandNew = false;
 
-    // 1. First check if backend returned user object
-    const apiUser = apiRes?.data?.user || apiRes?.user;
-    if (apiUser) {
-      matchedAccount = {
-        phone: (apiUser.phone || phone).replace('+91', ''),
-        role: apiUser.role || 'user',
-        name: apiUser.name || 'CardFlow User',
-        city: apiUser.city || 'Coimbatore',
-        state: apiUser.state || 'Tamil Nadu',
-        plan: apiUser.plan || 'free',
-        freeScansRemaining: apiUser.free_scans_remaining != null ? apiUser.free_scans_remaining : 30,
-        credits: apiUser.credit_balance != null ? apiUser.credit_balance : 10,
-        isIdVerified: apiUser.is_id_verified || false,
-        isNewUser: apiRes?.data?.is_new_user || apiRes?.is_new_user || false
-      };
-      isBrandNew = matchedAccount.isNewUser;
-    }
+      const apiUser = apiRes?.data?.user || apiRes?.user;
+      if (apiUser) {
+        matchedAccount = {
+          phone: (apiUser.phone || phone).replace('+91', ''),
+          role: apiUser.role || 'user',
+          name: apiUser.name || 'CardFlow User',
+          city: apiUser.city || 'Coimbatore',
+          state: apiUser.state || 'Tamil Nadu',
+          plan: apiUser.plan || 'free',
+          freeScansRemaining: apiUser.free_scans_remaining != null ? apiUser.free_scans_remaining : 30,
+          credits: apiUser.credit_balance != null ? apiUser.credit_balance : 10,
+          isIdVerified: apiUser.is_id_verified || false,
+          isNewUser: apiRes?.data?.is_new_user || apiRes?.is_new_user || false
+        };
+        isBrandNew = matchedAccount.isNewUser;
+      }
 
-    // 2. Check local seeded dev accounts
-    if (!matchedAccount || matchedAccount.name === 'CardFlow User') {
-      for (const key of Object.keys(DEV_TEST_ACCOUNTS)) {
-        const acc = DEV_TEST_ACCOUNTS[key];
-        if (acc.phone === phone) {
-          matchedAccount = { ...acc };
-          isBrandNew = false;
-          break;
+      if (!matchedAccount || matchedAccount.name === 'CardFlow User') {
+        for (const key of Object.keys(DEV_TEST_ACCOUNTS)) {
+          const acc = DEV_TEST_ACCOUNTS[key];
+          if (acc.phone === phone || acc.phone === String(phone).replace(/\D/g, '').slice(-10)) {
+            matchedAccount = { ...acc };
+            isBrandNew = false;
+            break;
+          }
         }
       }
+
+      if (!matchedAccount) {
+        isBrandNew = !!(apiRes?.data?.is_new_user || apiRes?.is_new_user);
+        matchedAccount = {
+          phone,
+          otp: '123456',
+          role: 'user',
+          name: apiUser?.name || 'CardFlow User',
+          city: 'Coimbatore',
+          state: 'Tamil Nadu',
+          plan: 'free',
+          freeScansRemaining: 30,
+          credits: 10,
+          isIdVerified: false,
+          isNewUser: isBrandNew
+        };
+      }
+
+      if (typeof options.beforeCommit === 'function') {
+        await options.beforeCommit();
+      }
+
+      const liveJwt = apiRes?.data?.access_token || apiRes?.access_token || `cf_token_${matchedAccount.phone}`;
+      setUser(matchedAccount);
+      setRole(matchedAccount.role);
+      setToken(liveJwt);
+      setIsNewUser(isBrandNew);
+
+      if (matchedAccount.role === 'owner' && matchedAccount.ownedBusinessIds?.length) {
+        setActiveBusinessId(matchedAccount.ownedBusinessIds[0]);
+      }
+
+      try {
+        localStorage.setItem('cf_user', JSON.stringify(matchedAccount));
+        localStorage.setItem('cf_token', liveJwt);
+      } catch (e) {}
+
+      loadUserVault(liveJwt);
+      loadMyBusinesses(liveJwt, matchedAccount);
+
+      setIsLoading(false);
+      return { success: true, user: matchedAccount, isNewUser: isBrandNew };
+    } catch (e) {
+      setIsLoading(false);
+      return { success: false, error: 'Something went wrong. Please try again.' };
     }
-
-    // 3. Any other new user
-    if (!matchedAccount) {
-      isBrandNew = true;
-      matchedAccount = {
-        phone,
-        otp: '123456',
-        role: 'user',
-        name: 'CardFlow User',
-        city: 'Coimbatore',
-        state: 'Tamil Nadu',
-        plan: 'free',
-        freeScansRemaining: 30,
-        credits: 10,
-        isIdVerified: false,
-        isNewUser: true
-      };
-    }
-
-    const liveJwt = apiRes?.data?.access_token || apiRes?.access_token || `cf_token_${matchedAccount.phone}`;
-    setUser(matchedAccount);
-    setRole(matchedAccount.role);
-    setToken(liveJwt);
-    setIsNewUser(isBrandNew);
-
-    if (matchedAccount.role === 'owner' && matchedAccount.ownedBusinessIds?.length) {
-      setActiveBusinessId(matchedAccount.ownedBusinessIds[0]);
-    }
-
-    try {
-      localStorage.setItem('cf_user', JSON.stringify(matchedAccount));
-      localStorage.setItem('cf_token', liveJwt);
-    } catch (e) {}
-
-    // Load this user's vault and businesses
-    loadUserVault(liveJwt);
-    loadMyBusinesses(liveJwt, matchedAccount);
-
-    setIsLoading(false);
-    return { success: true, user: matchedAccount, isNewUser: isBrandNew };
   };
 
-  const completeOnboarding = (profileData) => {
+  const completeOnboarding = async (profileData) => {
     const updatedUser = {
       ...user,
       name: profileData.name || 'CardFlow User',
@@ -366,6 +427,14 @@ export function AuthProvider({ children }) {
     try {
       localStorage.setItem('cf_user', JSON.stringify(updatedUser));
     } catch (e) {}
+
+    if (token) {
+      try {
+        await apiClient.updateProfile({ name: updatedUser.name }, token);
+      } catch (e) {
+        console.warn('Could not persist onboarding name', e);
+      }
+    }
   };
 
   const updateProfile = useCallback(async (fields) => {
@@ -497,6 +566,7 @@ export function AuthProvider({ children }) {
         loadUserVault,
         loadMyBusinesses,
         addMyBusiness,
+        updateMyBusiness,
         sendOtp,
         verifyOtp,
         completeOnboarding,

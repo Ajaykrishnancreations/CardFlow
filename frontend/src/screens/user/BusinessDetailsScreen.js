@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal } from 'react-native';
 import {
   Phone,
   MessageSquare,
@@ -16,30 +16,73 @@ import {
   CheckCircle2,
   QrCode,
   BookmarkCheck,
-  Bookmark
+  Bookmark,
+  Upload
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { DetailScreenHeader } from '../../components/DetailScreenHeader';
+import { CardViewToggle } from '../../components/CardViewToggle';
 import { useAuth } from '../../context/AuthContext';
+import { fetchCardOriginalImageUrl } from '../../services/api';
 
-export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
-  const { isBusinessSaved, saveBusinessToVault } = useAuth();
+export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBusinessUpdated }) {
+  const { user, token, myBusinesses, updateMyBusiness, isBusinessSaved, saveBusinessToVault } = useAuth();
   const [showEnquiryModal, setShowEnquiryModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [viewMode, setViewMode] = useState('digital');
+  const [originalSide, setOriginalSide] = useState('front');
   const [enquiryMessage, setEnquiryMessage] = useState('');
   const [sharePhone, setSharePhone] = useState(true);
   const [enquirySent, setEnquirySent] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [frontUrl, setFrontUrl] = useState(null);
+  const [backUrl, setBackUrl] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const frontEditRef = React.useRef(null);
+  const backEditRef = React.useRef(null);
+
+  useEffect(() => {
+    let blobs = [];
+    const load = async () => {
+      const frontPath = business?.card_image_url || business?.cardImageUrl;
+      const backPath = business?.card_back_image_url || business?.cardBackImageUrl;
+      if (frontPath?.startsWith('data:')) setFrontUrl(frontPath);
+      else if (frontPath && token) {
+        const u = await fetchCardOriginalImageUrl(frontPath, token);
+        if (u) blobs.push(u);
+        setFrontUrl(u);
+      }
+      if (backPath?.startsWith('data:')) setBackUrl(backPath);
+      else if (backPath && token) {
+        const u = await fetchCardOriginalImageUrl(backPath, token);
+        if (u) blobs.push(u);
+        setBackUrl(u);
+      }
+    };
+    load();
+    return () => blobs.forEach((u) => u?.startsWith?.('blob:') && URL.revokeObjectURL(u));
+  }, [business?.id, business?.card_image_url, business?.card_back_image_url, token]);
 
   if (!business) return null;
 
-  const cardImageUrl = business.card_image_url || business.cardImageUrl;
+  const isOwner = (myBusinesses || []).some(
+    (b) => String(b.id) === String(business.id) || (b.slug && b.slug === business.slug)
+  ) || business.owner_user_id === user?.id || business.ownerPhone === user?.phone;
+
+  const hasOriginalPath = !!(
+    business?.card_image_url ||
+    business?.cardImageUrl ||
+    business?.card_back_image_url ||
+    business?.cardBackImageUrl
+  );
+  const hasOriginal = !!(frontUrl || backUrl || hasOriginalPath);
+  const cardImageUrl = originalSide === 'back' ? backUrl : frontUrl;
   const whatsappNumber = business.whatsapp || business.phone;
   const showWhatsApp = !!(business.whatsapp || business.hasWhatsApp);
-
   const isSaved = isBusinessSaved(business);
 
   const handleSaveToVault = async () => {
@@ -73,56 +116,148 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
     }
   };
 
+  const openEdit = () => {
+    setEditForm({
+      business_name: business.name || '',
+      category: business.category || business.primary_category || '',
+      phone: business.phone || business.phones?.[0] || '',
+      whatsapp: business.whatsapp || '',
+      email: business.email || '',
+      website: business.website || '',
+      gstin: business.gstin || '',
+      address: business.address || business.address_line1 || '',
+      city: business.city || '',
+      state: business.state || '',
+      pincode: business.pincode || '',
+      description: business.description || '',
+      services: Array.isArray(business.services) ? business.services.join(', ') : (business.services || ''),
+      front_image_data: '',
+      back_image_data: ''
+    });
+    setShowEditModal(true);
+  };
+
+  const readEditImage = (file, key) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setEditForm((f) => ({ ...f, [key]: ev.target.result }));
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm?.business_name?.trim()) {
+      alert('Business name is required.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const payload = {
+        ...editForm,
+        services: editForm.services
+          ? editForm.services.split(',').map((s) => s.trim()).filter(Boolean)
+          : []
+      };
+      const next = await updateMyBusiness(business.id, payload);
+      onBusinessUpdated?.({ ...business, ...next, ...payload, name: payload.business_name });
+      setShowEditModal(false);
+      if (payload.front_image_data) setFrontUrl(payload.front_image_data);
+      if (payload.back_image_data) setBackUrl(payload.back_image_data);
+    } catch (e) {
+      alert(e.message || 'Could not update business');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <DetailScreenHeader
         title={business.name}
-        subtitle={business.category}
+        subtitle={business.category || business.primary_category}
         onBack={onBack}
+        onHome={onHome}
+        rightAction={
+          isOwner ? (
+            <TouchableOpacity
+              onPress={openEdit}
+              style={{ paddingHorizontal: 4, height: 44, justifyContent: 'center' }}
+            >
+              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>Edit</Text>
+            </TouchableOpacity>
+          ) : null
+        }
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Digital / Original Card Toggle */}
-        <View style={styles.viewToggleRow}>
-          <TouchableOpacity
-            style={[styles.viewToggleBtn, viewMode === 'digital' && styles.viewToggleBtnActive]}
-            onPress={() => setViewMode('digital')}
-          >
-            <Text style={[styles.viewToggleText, viewMode === 'digital' && styles.viewToggleTextActive]}>Digital Card</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.viewToggleBtn, viewMode === 'original' && styles.viewToggleBtnActive]}
-            onPress={() => setViewMode('original')}
-          >
-            <Text style={[styles.viewToggleText, viewMode === 'original' && styles.viewToggleTextActive]}>Original</Text>
-          </TouchableOpacity>
-        </View>
+        <CardViewToggle
+          value={viewMode}
+          onChange={setViewMode}
+          disabledIds={!hasOriginal && !isOwner ? ['original'] : []}
+        />
 
-        {viewMode === 'original' && cardImageUrl ? (
-          <View style={styles.originalCardWrap}>
-            <img src={cardImageUrl} alt={`${business.name} business card`} style={styles.originalCardImg} />
+        {viewMode === 'original' ? (
+          <View style={[styles.originalCardWrap, !hasOriginal && styles.originalEmptyWrap]}>
+            {hasOriginal ? (
+              <>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  <TouchableOpacity onPress={() => setOriginalSide('front')} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, backgroundColor: originalSide === 'front' ? '#FFFFFF' : 'rgba(255,255,255,0.15)' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: originalSide === 'front' ? colors.primary : '#FFFFFF' }}>Front</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setOriginalSide('back')} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999, backgroundColor: originalSide === 'back' ? '#FFFFFF' : 'rgba(255,255,255,0.15)' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: originalSide === 'back' ? colors.primary : '#FFFFFF' }}>Back</Text>
+                  </TouchableOpacity>
+                </View>
+                {cardImageUrl ? (
+                  <img src={cardImageUrl} alt={`${business.name} business card`} style={styles.originalCardImg} />
+                ) : (
+                  <Text style={styles.originalEmptyText}>This side is not available.</Text>
+                )}
+              </>
+            ) : (
+              <View style={{ alignItems: 'center', padding: spacing.lg }}>
+                <Text style={styles.originalEmptyTitle}>Original card unavailable</Text>
+                <Text style={styles.originalEmptyText}>
+                  {isOwner
+                    ? 'Upload your physical business card so visitors can see it.'
+                    : "This business hasn't uploaded an original card yet."}
+                </Text>
+                {isOwner ? (
+                  <Button
+                    title="+ Add Card Image"
+                    size="sm"
+                    onPress={openEdit}
+                    style={{ marginTop: spacing.md }}
+                  />
+                ) : null}
+              </View>
+            )}
           </View>
         ) : null}
 
-        {/* Business Header Card */}
         <Card style={styles.profileHeaderCard}>
           {isSaved && (
             <View style={styles.savedBadgeTop}>
               <BookmarkCheck size={14} color="#059669" style={{ marginRight: 4 }} />
-              <Text style={styles.savedBadgeText}>SAVED IN VAULT</Text>
+              <Text style={styles.savedBadgeText}>SAVED</Text>
             </View>
           )}
 
           <View style={styles.logoRow}>
             <View style={styles.logoBadge}>
-              <Building2 size={32} color={colors.primary} />
+              <Building2 size={28} color={colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.bizName}>{business.name}</Text>
-              <Text style={styles.bizCategory}>{business.category} • Est. {business.yearEstablished || 2015}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                <Badge type="gst" label="GST Verified" />
-                <Text style={styles.gstin}>{business.gstin}</Text>
+              <Text style={styles.bizCategory}>
+                {[business.category || business.primary_category, business.city].filter(Boolean).join(' · ')}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap', gap: 6 }}>
+                {business.verification === 'gst' ? (
+                  <Badge type="gst" label="GST Verified" />
+                ) : business.gstin ? (
+                  <Badge type="gstPending" label="GST Registered" />
+                ) : null}
+                {business.gstin ? <Text style={styles.gstin}>{business.gstin}</Text> : null}
               </View>
             </View>
           </View>
@@ -188,23 +323,25 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
           </View>
         </Card>
 
-        {/* Digital Business Card Studio Preview */}
-        <Card style={styles.digitalCardPreview}>
-          <View style={styles.digitalCardTop}>
-            <View>
-              <Text style={styles.digitalOwnerName}>{business.digitalCard?.ownerName || 'Business Owner'}</Text>
-              <Text style={styles.digitalOwnerTitle}>{business.digitalCard?.title || 'Proprietor'}</Text>
-              <Text style={styles.digitalBizName}>{business.name}</Text>
+        {/* Business owner — compact */}
+        <View style={styles.ownerSection}>
+          <Text style={styles.ownerLabel}>BUSINESS OWNER</Text>
+          <View style={styles.ownerRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.ownerName}>{business.digitalCard?.ownerName || business.name}</Text>
+              <Text style={styles.ownerRole}>{business.digitalCard?.title || 'Proprietor'}</Text>
+              {(business.email || business.phone) ? (
+                <Text style={styles.ownerMeta}>{[business.phone, business.email].filter(Boolean).join(' · ')}</Text>
+              ) : null}
             </View>
-            <TouchableOpacity onPress={onShowQr} style={styles.qrIconWrap}>
-              <QrCode size={36} color="#FFFFFF" />
-            </TouchableOpacity>
+            {onShowQr ? (
+              <TouchableOpacity onPress={onShowQr} style={styles.qrSoft}>
+                <QrCode size={22} color={colors.primary} />
+              </TouchableOpacity>
+            ) : null}
           </View>
-          <View style={styles.digitalCardBottom}>
-            <Text style={styles.digitalCardPhone}>{business.phone} • {business.email}</Text>
-            <Text style={styles.digitalCardUrl}>cardflow.app/b/{business.slug}</Text>
-          </View>
-        </Card>
+          <Text style={styles.ownerLink}>cardflow.app/b/{business.slug}</Text>
+        </View>
 
         {/* About Section */}
         <Card style={styles.sectionCard}>
@@ -216,7 +353,7 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
         <Card style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Products & Services</Text>
           <View style={styles.serviceChipsWrap}>
-            {business.services.map((svc, idx) => (
+            {(business.services || []).map((svc, idx) => (
               <View key={idx} style={styles.serviceChip}>
                 <Text style={styles.serviceChipText}>{svc}</Text>
               </View>
@@ -245,16 +382,18 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
         </Card>
 
         {/* Verification & Trust */}
+        {business.verification === 'gst' ? (
         <Card style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Trust & Verification</Text>
           <View style={styles.trustRow}>
             <ShieldCheck size={20} color={colors.verifiedGst} style={{ marginRight: spacing.sm }} />
             <View>
-              <Text style={styles.trustTitle}>Govt. GSTIN Verified Listing</Text>
-              <Text style={styles.trustSub}>Verified on GST Portal • Active Status</Text>
+              <Text style={styles.trustTitle}>GST Verified</Text>
+              <Text style={styles.trustSub}>Confirmed by CardFlow verification</Text>
             </View>
           </View>
         </Card>
+        ) : null}
       </ScrollView>
 
       {/* Direct Enquiry Modal Sheet */}
@@ -311,6 +450,66 @@ export function BusinessDetailsScreen({ business, onBack, onShowQr }) {
           </View>
         </View>
       )}
+
+      {showEditModal && editForm ? (
+        <Modal transparent animationType="slide" visible={showEditModal} onRequestClose={() => setShowEditModal(false)}>
+          <View style={styles.editOverlay}>
+            <View style={styles.editSheet}>
+              <View style={styles.editHeader}>
+                <Text style={styles.editTitle}>Edit Business</Text>
+                <TouchableOpacity onPress={() => setShowEditModal(false)}>
+                  <X size={20} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
+                {[
+                  { key: 'business_name', label: 'Business Name *' },
+                  { key: 'category', label: 'Category' },
+                  { key: 'phone', label: 'Phone' },
+                  { key: 'whatsapp', label: 'WhatsApp' },
+                  { key: 'email', label: 'Email' },
+                  { key: 'website', label: 'Website' },
+                  { key: 'gstin', label: 'GSTIN' },
+                  { key: 'address', label: 'Address' },
+                  { key: 'city', label: 'City' },
+                  { key: 'state', label: 'State' },
+                  { key: 'pincode', label: 'Pincode' },
+                  { key: 'description', label: 'Description' },
+                  { key: 'services', label: 'Products & Services (comma separated)' }
+                ].map(({ key, label }) => (
+                  <View key={key}>
+                    <Text style={styles.inputLabel}>{label}</Text>
+                    <TextInput
+                      value={editForm[key]}
+                      onChangeText={(v) => setEditForm((f) => ({ ...f, [key]: v }))}
+                      style={styles.editInput}
+                      placeholderTextColor={colors.textMuted}
+                    />
+                  </View>
+                ))}
+                <input type="file" accept="image/*" ref={frontEditRef} style={{ display: 'none' }} onChange={(e) => { if (e.target.files?.[0]) readEditImage(e.target.files[0], 'front_image_data'); e.target.value = ''; }} />
+                <input type="file" accept="image/*" ref={backEditRef} style={{ display: 'none' }} onChange={(e) => { if (e.target.files?.[0]) readEditImage(e.target.files[0], 'back_image_data'); e.target.value = ''; }} />
+                <TouchableOpacity style={styles.uploadRow} onPress={() => frontEditRef.current?.click()}>
+                  <Upload size={16} color={colors.primary} />
+                  <Text style={styles.uploadLabel}>
+                    {editForm.front_image_data || frontUrl ? 'Replace Front Card' : 'Upload Front Card'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.uploadRow} onPress={() => backEditRef.current?.click()}>
+                  <Upload size={16} color={colors.primary} />
+                  <Text style={styles.uploadLabel}>
+                    {editForm.back_image_data || backUrl ? 'Replace Back Card' : 'Upload Back Card'}
+                  </Text>
+                </TouchableOpacity>
+              </ScrollView>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.md }}>
+                <Button title="Cancel" variant="outline" onPress={() => setShowEditModal(false)} style={{ flex: 1 }} />
+                <Button title="Save" onPress={handleSaveEdit} loading={savingEdit} style={{ flex: 1.4 }} />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -324,33 +523,101 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingBottom: spacing.xxxl
   },
-  viewToggleRow: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgMuted,
-    borderRadius: radii.full,
-    padding: 4,
-    marginBottom: spacing.md
-  },
-  viewToggleBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: radii.full
-  },
-  viewToggleBtnActive: {
-    backgroundColor: '#FFFFFF',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-  },
-  viewToggleText: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
-  viewToggleTextActive: { color: colors.primary, fontWeight: '700' },
   originalCardWrap: {
     backgroundColor: '#0F172A',
-    borderRadius: radii.lg,
+    borderRadius: radii.card,
     padding: spacing.md,
     marginBottom: spacing.md,
     alignItems: 'center'
   },
+  originalEmptyWrap: {
+    backgroundColor: colors.bgMutedDark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border
+  },
+  originalEmptyTitle: {
+    color: colors.textPrimary,
+    fontWeight: '700',
+    fontSize: 14,
+    textAlign: 'center'
+  },
+  originalEmptyText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+    maxWidth: 260
+  },
   originalCardImg: { maxWidth: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: radii.md },
+  ownerSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    padding: spacing.md,
+    marginBottom: spacing.md
+  },
+  ownerLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginBottom: spacing.sm
+  },
+  ownerRow: { flexDirection: 'row', alignItems: 'center' },
+  ownerName: { fontSize: 15, fontWeight: '700', color: colors.textPrimary },
+  ownerRole: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  ownerMeta: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
+  ownerLink: { fontSize: 11, color: colors.primary, fontWeight: '600', marginTop: spacing.sm },
+  qrSoft: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  editOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.55)',
+    justifyContent: 'center',
+    padding: spacing.md
+  },
+  editSheet: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radii.modal,
+    padding: spacing.lg,
+    maxWidth: 520,
+    width: '100%',
+    alignSelf: 'center'
+  },
+  editHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md
+  },
+  editTitle: { ...typography.titleSmall, color: colors.textPrimary },
+  editInput: {
+    backgroundColor: colors.bgMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    borderRadius: radii.input,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+    outlineStyle: 'none'
+  },
+  uploadRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border
+  },
+  uploadLabel: { fontSize: 13, fontWeight: '600', color: colors.primary },
   profileHeaderCard: {
     padding: spacing.lg,
     marginBottom: spacing.md,
@@ -503,14 +770,16 @@ const styles = StyleSheet.create({
     gap: spacing.xs
   },
   serviceChip: {
-    backgroundColor: colors.bgMuted,
+    backgroundColor: colors.bgMutedDark,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: radii.md
+    paddingVertical: 4,
+    borderRadius: radii.chip,
+    marginRight: 6,
+    marginBottom: 4
   },
   serviceChipText: {
-    fontSize: 12,
-    color: colors.textSecondary,
+    fontSize: 11,
+    color: colors.textMuted,
     fontWeight: '500'
   },
   infoRow: {

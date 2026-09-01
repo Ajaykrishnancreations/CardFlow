@@ -106,6 +106,8 @@ type Business struct {
 	EnquiriesCount    int        `json:"enquiries_count,omitempty"`
 	Services          []string   `json:"services,omitempty"`
 	Phones            []string   `json:"phones,omitempty"`
+	CardImageURL      string     `json:"card_image_url,omitempty"`
+	CardBackImageURL  string     `json:"card_back_image_url,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 	DeletedAt         *time.Time `json:"deleted_at,omitempty"`
@@ -140,6 +142,7 @@ type SavedCard struct {
 	FrontImageKey          *string    `json:"front_image_key,omitempty"`
 	BackImageKey           *string    `json:"back_image_key,omitempty"`
 	OriginalCardImageURL   string     `json:"original_card_image_url,omitempty"`
+	OriginalBackImageURL   string     `json:"original_back_image_url,omitempty"`
 	GSTIN                  string     `json:"gstin,omitempty"`
 	Latitude               *float64   `json:"latitude,omitempty"`
 	Longitude              *float64   `json:"longitude,omitempty"`

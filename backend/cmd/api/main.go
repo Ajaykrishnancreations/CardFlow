@@ -153,9 +153,12 @@ func main() {
 			r.Delete("/users/me", authHandler.DeleteMe)
 			r.Get("/users/me/export", authHandler.ExportMe)
 
+			r.Get("/businesses/{id}/card-image", businessHandler.GetCardImage)
+
 			// Card Vault & OCR Scanner
 			r.Get("/cards", cardHandler.ListCards)
 			r.Post("/cards", cardHandler.CreateCard)
+			r.Patch("/cards/{id}", cardHandler.UpdateCard)
 			r.Get("/cards/{id}/original-image", cardHandler.GetOriginalImage)
 			r.Post("/cards/{id}/original-image", cardHandler.UploadOriginalImage)
 			r.Post("/cards/upload-url", cardHandler.GetUploadURL)
@@ -176,6 +179,9 @@ func main() {
 			r.Route("/owner", func(r chi.Router) {
 				r.Get("/businesses", businessHandler.ListMyBusinesses)
 				r.Post("/businesses", businessHandler.CreateBusiness)
+				r.Patch("/businesses/{id}", businessHandler.UpdateBusiness)
+				r.Post("/businesses/{id}/card-image", businessHandler.UploadCardImage)
+				r.Get("/businesses/{id}/card-image", businessHandler.GetCardImage)
 				r.Get("/businesses/{id}/analytics", businessHandler.GetBusinessAnalytics)
 				r.Post("/businesses/{id}/verify/gst", businessHandler.VerifyGST)
 				r.Get("/businesses/{id}/card", businessHandler.GetDigitalCard)

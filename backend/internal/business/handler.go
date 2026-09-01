@@ -60,6 +60,91 @@ func (h *BusinessHandler) CreateBusiness(w http.ResponseWriter, r *http.Request)
 	response.JSON(w, http.StatusCreated, biz)
 }
 
+func (h *BusinessHandler) UpdateBusiness(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	bizUUID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid business ID", nil)
+		return
+	}
+	var in CreateBusinessInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		response.BadRequest(w, "invalid request body", err.Error())
+		return
+	}
+	biz, err := h.svc.UpdateBusiness(r.Context(), user.ID, bizUUID, in)
+	if err != nil {
+		if err.Error() == "access denied: you do not own this business" {
+			response.Forbidden(w, err.Error())
+			return
+		}
+		response.InternalServerError(w, "failed to update business: "+err.Error())
+		return
+	}
+	response.JSON(w, http.StatusOK, biz)
+}
+
+func (h *BusinessHandler) UploadCardImage(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	bizUUID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid business ID", nil)
+		return
+	}
+	var req struct {
+		Side     string `json:"side"`
+		ImageData string `json:"image_data"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "invalid request body", err.Error())
+		return
+	}
+	if err := h.svc.UploadCardImage(r.Context(), user.ID, bizUUID, req.Side, req.ImageData); err != nil {
+		if err.Error() == "access denied: you do not own this business" {
+			response.Forbidden(w, err.Error())
+			return
+		}
+		response.BadRequest(w, err.Error(), nil)
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"ok":   true,
+		"side": req.Side,
+		"url":  "/api/v1/owner/businesses/" + bizUUID.String() + "/card-image?side=" + req.Side,
+	})
+}
+
+func (h *BusinessHandler) GetCardImage(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	idStr := chi.URLParam(r, "id")
+	bizUUID, err := uuid.Parse(idStr)
+	if err != nil {
+		response.BadRequest(w, "invalid business ID", nil)
+		return
+	}
+	side := r.URL.Query().Get("side")
+	data, contentType, err := h.svc.GetCardImage(r.Context(), user.ID, bizUUID, side)
+	if err != nil || len(data) == 0 {
+		response.NotFound(w, "card image not found")
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
 func (h *BusinessHandler) GetBusinessAnalytics(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
 	if !ok || user == nil {

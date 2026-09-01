@@ -2,36 +2,44 @@ import Tesseract from 'tesseract.js';
 
 const GSTIN_REGEX = /\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b/i;
 const EMAIL_REGEX = /[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
-const WEBSITE_REGEX = /(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9.]*\.[a-zA-Z]{2,}(?:\/[^\s]*)?/gi;
-const INDIAN_PHONE_REGEX = /(?:\+91|91|0)?[\s-]?[6-9]\d{4}[\s-]?\d{5}|\+\d{1,3}[\s-]?\d{6,12}/g;
-const PINCODE_REGEX = /\b(\d{6})\b/;
-
-const COMPANY_SUFFIXES = /\b(TRADERS|TRADING|ENTERPRISES|SOLUTIONS|TECHNOLOGIES|INDUSTRIES|WORKS|SERVICES|PVT\.?\s*LTD|LTD|LLP|INC|CORP|COMPANY|CO\.)\b/i;
-const DESIGNATION_WORDS = /\b(Managing Partner|Director|Manager|Partner|Founder|CEO|CTO|Proprietor|Owner|Agent|Consultant|Engineer)\b/i;
+const WEBSITE_REGEX = /(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9.]{0,60}\.[a-zA-Z]{2,}(?:\/[^\s]*)?/gi;
+const INDIAN_PHONE_REGEX = /(?:\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}/g;
+const PINCODE_REGEX = /\b([1-9]\d{5})\b/;
+const COMPANY_SUFFIXES = /\b(TRADERS|TRADING|ENTERPRISES|SOLUTIONS|TECHNOLOGIES|INDUSTRIES|WORKS|SERVICES|PVT\.?\s*LTD\.?|PRIVATE\s+LIMITED|LTD\.?|LLP|INC\.?|CORP\.?|COMPANY|CO\.|AGENCY|STEELS?|FABRICS?|TOOLS?)\b/i;
+const DESIGNATION_WORDS = /\b(Managing\s+Partner|Managing\s+Director|General\s+Manager|Sales\s+Manager|Partner|Director|Manager|Founder|Proprietor|Owner|CEO|CTO|CFO|Consultant|Engineer|Agent)\b/i;
+const NOISE_LINE = /^(file|edit|view|bookmarks|profiles|tab|window|help|chrome|safari|since\s+\d{4}|est\.?\s*\d{4}|phone|mobile|email|website|gstin?|gst|tel|fax|www)$/i;
+const PRODUCT_WORDS = /\b(iron|scrap|steel|cnc|milling|fabric|textile|tools?|software|erp|cloud)\b/i;
 
 function stripScripts(text) {
   if (!text) return '';
-  // Remove Tamil, Devanagari and other non-Latin scripts from Latin fields
   return text
     .replace(/[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0B80-\u0BFF\u0C00-\u0C7F]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
+function isValidGstin(value) {
+  if (!value) return false;
+  return /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(value);
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value || '');
+}
+
 function normalizePhone(raw) {
   if (!raw) return null;
-  let digits = raw.replace(/[^\d+]/g, '');
-  if (digits.startsWith('+')) digits = digits.slice(1);
-  if (digits.startsWith('91') && digits.length === 12) {
-    return { raw: `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`, e164: `+${digits}`, digits };
-  }
-  if (digits.length === 10 && /^[6-9]/.test(digits)) {
-    return { raw: `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`, e164: `+91${digits}`, digits };
-  }
-  if (digits.length >= 7 && digits.length <= 15) {
-    return { raw: raw.trim(), e164: `+${digits}`, digits };
-  }
-  return null;
+  const digits = String(raw).replace(/\D/g, '');
+  let ten = digits;
+  if (digits.length === 12 && digits.startsWith('91')) ten = digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith('0')) ten = digits.slice(1);
+  if (ten.length !== 10 || !/^[6-9]/.test(ten)) return null;
+  return {
+    raw: `+91 ${ten.slice(0, 5)} ${ten.slice(5)}`,
+    e164: `+91${ten}`,
+    digits: ten,
+    confidence: 0.92
+  };
 }
 
 function extractPhonesFromText(text) {
@@ -41,15 +49,13 @@ function extractPhonesFromText(text) {
   for (const m of matches) {
     const norm = normalizePhone(m);
     if (norm && !found.some((f) => f.digits === norm.digits)) {
-      found.push({ raw: norm.raw, e164: norm.e164, type: 'mobile', is_whatsapp: true, confidence: 0.95 });
-    }
-  }
-  // Also scan for spaced digit groups: 96555 87877
-  const spaced = blob.match(/\b[6-9]\d{4}\s+\d{5}\b/g) || [];
-  for (const m of spaced) {
-    const norm = normalizePhone(m);
-    if (norm && !found.some((f) => f.digits === norm.digits)) {
-      found.push({ raw: norm.raw, e164: norm.e164, type: 'mobile', is_whatsapp: true, confidence: 0.95 });
+      found.push({
+        raw: norm.raw,
+        e164: norm.e164,
+        type: 'mobile',
+        is_whatsapp: false,
+        confidence: norm.confidence
+      });
     }
   }
   return found;
@@ -58,26 +64,30 @@ function extractPhonesFromText(text) {
 function extractEmailsFromText(text) {
   const blob = text.replace(/\n/g, ' ').replace(/\s+/g, ' ');
   const matches = blob.match(EMAIL_REGEX) || [];
-  return [...new Set(matches.map((e) => e.toLowerCase().replace(/[,;:]+$/, '')))];
+  return [...new Set(
+    matches
+      .map((e) => e.toLowerCase().replace(/[,;:]+$/, ''))
+      .filter(isValidEmail)
+  )];
 }
 
 function extractWebsitesFromText(text, emails) {
   const blob = text.replace(/\n/g, ' ');
   const matches = blob.match(WEBSITE_REGEX) || [];
-  const emailDomains = new Set((emails || []).map((e) => e.split('@')[1]?.toLowerCase()).filter(Boolean));
   const sites = [];
   for (const w of matches) {
     if (w.includes('@')) continue;
     const clean = w.replace(/[,;:]+$/, '');
     const lower = clean.toLowerCase();
-    if (lower.includes('gmail.com') || lower.includes('yahoo.')) continue;
-    const formatted = clean.startsWith('http') ? clean : `https://${clean.replace(/^www\./, 'www.')}`;
+    if (/(gmail|yahoo|outlook|hotmail|whatsapp)\./.test(lower)) continue;
+    if (!/\.[a-z]{2,}/i.test(clean)) continue;
+    const formatted = clean.startsWith('http') ? clean : `https://${clean}`;
     if (!sites.includes(formatted)) sites.push(formatted);
   }
-  // Derive from email domain if no website
+  // Only derive website from email when domain looks like a business site
   if (sites.length === 0 && emails?.[0]) {
     const domain = emails[0].split('@')[1];
-    if (domain && !['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com'].includes(domain)) {
+    if (domain && !/(gmail|yahoo|outlook|hotmail|icloud)\./i.test(domain)) {
       sites.push(`https://www.${domain}`);
     }
   }
@@ -85,8 +95,19 @@ function extractWebsitesFromText(text, emails) {
 }
 
 function extractGstin(text) {
-  const m = text.replace(/\s/g, '').match(GSTIN_REGEX);
-  return m ? m[1].toUpperCase() : '';
+  const compact = text.replace(/\s+/g, '');
+  const m = compact.match(GSTIN_REGEX);
+  if (!m) return { value: '', confidence: 0 };
+  const value = m[1].toUpperCase();
+  return {
+    value: isValidGstin(value) ? value : '',
+    confidence: isValidGstin(value) ? 0.95 : 0
+  };
+}
+
+function extractPincode(text) {
+  const m = text.match(PINCODE_REGEX);
+  return m ? m[1] : '';
 }
 
 function extractAddress(lines, fullText) {
@@ -94,77 +115,115 @@ function extractAddress(lines, fullText) {
   for (const line of lines) {
     const clean = stripScripts(line);
     const lower = clean.toLowerCase();
+    if (clean.length < 6) continue;
+    if (clean.match(EMAIL_REGEX) || clean.match(INDIAN_PHONE_REGEX) || clean.match(WEBSITE_REGEX)) continue;
+    if (GSTIN_REGEX.test(clean.replace(/\s/g, ''))) continue;
     if (
       PINCODE_REGEX.test(clean) ||
-      lower.includes('nagar') ||
-      lower.includes('road') ||
-      lower.includes('street') ||
-      lower.includes('coimbatore') ||
-      lower.includes('tamil nadu') ||
-      lower.includes('address') ||
-      /\d+[\/\\]/.test(clean)
+      /\b(nagar|road|street|street|avenue|layout|estate|district|tamil\s*nadu|coimbatore|chennai|bangalore|bengaluru)\b/i.test(lower) ||
+      /^\d+[\/\\-]/.test(clean)
     ) {
       const addr = clean.replace(/^(address|addr)[:\s]*/i, '').trim();
       if (addr.length > 5) addrLines.push(addr);
     }
   }
-  if (addrLines.length === 0) {
-    const pinMatch = fullText.match(/[\d/]+[^,\n]*(?:nagar|road|street)[^,\n]*,[^,\n]*(?:\d{6})/i);
-    if (pinMatch) return stripScripts(pinMatch[0]);
-  }
-  return addrLines.join(', ');
+  if (addrLines.length) return { value: addrLines.join(', '), confidence: 0.75 };
+  const pin = extractPincode(fullText);
+  return { value: pin ? `PIN ${pin}` : '', confidence: pin ? 0.4 : 0 };
 }
 
 function extractCompany(lines) {
+  const candidates = [];
   for (const line of lines) {
     const clean = stripScripts(line);
-    if (clean.length < 3) continue;
-    if (COMPANY_SUFFIXES.test(clean) || (clean === clean.toUpperCase() && clean.length >= 4 && /[A-Z]/.test(clean))) {
-      if (!clean.match(EMAIL_REGEX) && !clean.match(INDIAN_PHONE_REGEX)) {
-        return clean.replace(/^(since|est\.?)\s*\d{4}\s*/i, '').trim();
-      }
-    }
+    if (clean.length < 3 || clean.length > 60) continue;
+    if (NOISE_LINE.test(clean)) continue;
+    if (clean.match(EMAIL_REGEX) || clean.match(INDIAN_PHONE_REGEX) || clean.match(WEBSITE_REGEX)) continue;
+    if (DESIGNATION_WORDS.test(clean) && !COMPANY_SUFFIXES.test(clean)) continue;
+    if (PRODUCT_WORDS.test(clean) && !COMPANY_SUFFIXES.test(clean) && clean.length < 20) continue;
+
+    let score = 0;
+    if (COMPANY_SUFFIXES.test(clean)) score += 50;
+    if (clean === clean.toUpperCase() && /[A-Z]{3,}/.test(clean)) score += 30;
+    if (clean.split(/\s+/).length >= 2) score += 10;
+    if (clean.length >= 8) score += 8;
+    if (score >= 30) candidates.push({ value: clean.replace(/^(since|est\.?)\s*\d{4}\s*/i, '').trim(), score });
   }
-  // Longest ALL CAPS line
-  const caps = lines
-    .map(stripScripts)
-    .filter((l) => l.length >= 4 && l === l.toUpperCase() && /[A-Z]/.test(l) && !l.match(EMAIL_REGEX));
-  if (caps.length) return caps.sort((a, b) => b.length - a.length)[0];
-  return '';
+  candidates.sort((a, b) => b.score - a.score);
+  if (!candidates.length) return { value: '', confidence: 0 };
+  return {
+    value: candidates[0].value,
+    confidence: Math.min(0.95, candidates[0].score / 80)
+  };
 }
 
 function extractPersonName(lines, emails, company) {
+  const companyLower = (company || '').toLowerCase();
   for (const line of lines) {
     const clean = stripScripts(line);
-    if (clean.length < 3 || clean.length > 40) continue;
+    if (clean.length < 3 || clean.length > 36) continue;
+    if (NOISE_LINE.test(clean)) continue;
     if (clean.match(EMAIL_REGEX) || clean.match(INDIAN_PHONE_REGEX) || clean.match(WEBSITE_REGEX)) continue;
     if (COMPANY_SUFFIXES.test(clean) || clean === clean.toUpperCase()) continue;
     if (DESIGNATION_WORDS.test(clean)) continue;
-    if (PINCODE_REGEX.test(clean) || clean.toLowerCase().includes('nagar')) continue;
-    const words = clean.split(/\s+/);
-    if (words.length >= 1 && words.length <= 4 && /^[A-Za-z\s.']+$/.test(clean)) {
-      return clean.split(/\s+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-    }
+    if (PRODUCT_WORDS.test(clean)) continue;
+    if (PINCODE_REGEX.test(clean) || /\b(nagar|road|street|address)\b/i.test(clean)) continue;
+    if (companyLower && companyLower.includes(clean.toLowerCase())) continue;
+    if (!/^[A-Za-z][A-Za-z.'\s-]*$/.test(clean)) continue;
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length < 1 || words.length > 3) continue;
+    // Reject single short tokens that look like OCR noise ("Test", "Lipi", "Ltd")
+    if (words.length === 1 && words[0].length < 4) continue;
+    if (words.length === 1 && /^(test|demo|sample|name|card)$/i.test(words[0])) continue;
+    return {
+      value: words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '),
+      confidence: words.length >= 2 ? 0.8 : 0.55
+    };
   }
-  // From email: lipi.d.sivakumar@gmail.com -> Sivakumar
+
+  // Soft fallback from email local-part — only multi-part names
   if (emails?.[0]) {
     const local = emails[0].split('@')[0];
-    const parts = local.split(/[._-]/).filter(Boolean);
-    const namePart = parts.find((p) => p.length > 2 && !['lipi', 'info', 'contact', 'sales'].includes(p.toLowerCase()));
-    if (namePart) {
-      return namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
+    const parts = local.split(/[._-]/).filter((p) => p.length > 2);
+    const skip = new Set(['lipi', 'info', 'contact', 'sales', 'admin', 'office', 'mail']);
+    const nameParts = parts.filter((p) => !skip.has(p.toLowerCase()) && /^[a-z]+$/i.test(p));
+    if (nameParts.length >= 1) {
+      const pick = nameParts[nameParts.length - 1];
+      if (pick.length >= 4 && !/^(test|demo)$/i.test(pick)) {
+        return {
+          value: pick.charAt(0).toUpperCase() + pick.slice(1).toLowerCase(),
+          confidence: 0.45
+        };
+      }
     }
   }
-  return '';
+  return { value: '', confidence: 0 };
 }
 
 function extractDesignation(lines) {
   for (const line of lines) {
     const clean = stripScripts(line);
+    if (clean.length > 40) continue;
     const m = clean.match(DESIGNATION_WORDS);
-    if (m) return m[0];
+    if (!m) continue;
+    // Require the matched title to dominate the line (avoid random matches)
+    const title = m[0];
+    if (clean.length > title.length + 18) continue;
+    return { value: title.replace(/\s+/g, ' '), confidence: 0.85 };
   }
-  return '';
+  return { value: '', confidence: 0 };
+}
+
+function companyFromEmail(emails) {
+  if (!emails?.[0]) return { value: '', confidence: 0 };
+  const domain = emails[0].split('@')[1] || '';
+  const root = domain.split('.')[0] || '';
+  if (!root || /(gmail|yahoo|outlook|hotmail|icloud)/i.test(root)) return { value: '', confidence: 0 };
+  if (root.length < 4) return { value: '', confidence: 0 };
+  return {
+    value: root.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+    confidence: 0.35
+  };
 }
 
 export function parseBusinessCardText(rawText) {
@@ -177,7 +236,11 @@ export function parseBusinessCardText(rawText) {
     phones: [],
     emails: [],
     raw_address: '',
-    tags: ['Business Card']
+    city: '',
+    state: '',
+    pincode: '',
+    tags: ['Business Card'],
+    field_confidence: {}
   };
 
   if (!rawText || typeof rawText !== 'string') return empty;
@@ -186,106 +249,156 @@ export function parseBusinessCardText(rawText) {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l.length > 1)
-    .filter((l) => !/^(file|edit|view|bookmarks|profiles|tab|window|help)/i.test(l));
+    .filter((l) => !NOISE_LINE.test(l));
 
   const fullText = lines.join('\n');
-
   const emails = extractEmailsFromText(fullText);
   const phones = extractPhonesFromText(fullText);
   const websites = extractWebsitesFromText(fullText, emails);
-  const gstin = extractGstin(fullText);
-  const company = extractCompany(lines) || '';
-  const person_name = extractPersonName(lines, emails, company);
+  const gst = extractGstin(fullText);
+  const companyHit = extractCompany(lines);
+  const emailCompany = companyFromEmail(emails);
+  const company =
+    companyHit.confidence >= 0.5
+      ? companyHit
+      : (emailCompany.confidence > companyHit.confidence ? emailCompany : companyHit);
+  const person = extractPersonName(lines, emails, company.value);
   const designation = extractDesignation(lines);
-  const raw_address = extractAddress(lines, fullText);
+  const address = extractAddress(lines, fullText);
+  const pincode = extractPincode(fullText);
 
-  let finalCompany = company;
-  if (!finalCompany && emails[0]) {
-    const domain = emails[0].split('@')[1]?.split('.')[0];
-    if (domain && domain !== 'gmail') finalCompany = domain.replace(/-/g, ' ').toUpperCase();
-  }
+  // Prefer blank over garbage
+  const pick = (hit, minConfidence = 0.45) =>
+    hit.confidence >= minConfidence ? hit.value : '';
 
-  const tags = [];
-  if (finalCompany) tags.push(finalCompany);
-  if (designation) tags.push(designation);
-  if (tags.length === 0) tags.push('Business Card');
+  const field_confidence = {
+    person_name: person.confidence,
+    designation: designation.confidence,
+    company: company.confidence,
+    phone: phones[0]?.confidence || 0,
+    email: emails[0] ? 0.95 : 0,
+    website: websites[0] ? 0.7 : 0,
+    gstin: gst.confidence,
+    address: address.confidence,
+    pincode: pincode ? 0.8 : 0
+  };
 
   return {
-    person_name,
-    designation,
-    company: finalCompany,
-    website: websites[0] || '',
-    gstin,
+    person_name: pick(person, 0.45),
+    designation: pick(designation, 0.7),
+    company: pick(company, 0.35),
+    website: (websites[0] || '').replace(/^https?:\/\//, ''),
+    gstin: gst.value,
     phones,
     emails,
-    raw_address,
-    tags
+    raw_address: pick(address, 0.4),
+    city: '',
+    state: '',
+    pincode,
+    tags: company.value ? [company.value, 'Business Card'] : ['Business Card'],
+    field_confidence
   };
 }
 
-/** Score how complete/trustworthy an extraction is (0–100) */
 export function scoreExtraction(data) {
   if (!data) return 0;
   let score = 0;
-  if (data.company && data.company.length > 3 && !/[\u0900-\u0BFF]/.test(data.company)) score += 20;
-  if (data.emails?.[0]?.includes('@') && data.emails[0].includes('.')) score += 20;
+  if (data.company && data.company.length > 3) score += 20;
+  if (data.emails?.[0] && isValidEmail(data.emails[0])) score += 20;
   if (data.phones?.[0]?.raw?.replace(/\D/g, '').length >= 10) score += 20;
   if (data.raw_address?.length > 10) score += 15;
-  if (data.person_name && data.person_name.length > 2 && /^[A-Za-z\s.']+$/.test(data.person_name)) score += 15;
+  if (data.person_name && data.person_name.length > 2) score += 15;
   if (data.website) score += 5;
-  if (data.gstin) score += 5;
+  if (data.gstin && isValidGstin(data.gstin)) score += 5;
   return score;
 }
 
-/** Merge two extractions, preferring cleaner / more complete fields */
 export function mergeExtractions(primary, secondary) {
   if (!secondary) return primary || {};
   if (!primary) return secondary;
 
-  const isCleanLatin = (s) => s && !/[\u0900-\u0BFF]/.test(s);
+  const conf = (obj, key) => obj?.field_confidence?.[key] || 0;
 
-  const strScore = (s, minLen = 1) => {
-    if (!s || s.length < minLen) return 0;
-    let sc = Math.min(s.length, 80);
-    if (isCleanLatin(s)) sc += 40;
-    if (/[\u0900-\u0BFF]/.test(s)) sc -= 120;
-    return sc;
+  const pickStr = (key, minLen = 1) => {
+    const a = primary[key] || '';
+    const b = secondary[key] || '';
+    if (!a && !b) return '';
+    if (!a) return b.length >= minLen ? b : '';
+    if (!b) return a.length >= minLen ? a : '';
+    return conf(secondary, key) > conf(primary, key) ? b : a;
   };
 
-  const pickStr = (a, b, minLen = 1) => (strScore(b, minLen) > strScore(a, minLen) ? b : a);
+  const phoneMap = new Map();
+  [...(primary.phones || []), ...(secondary.phones || [])].forEach((p) => {
+    if (!p?.digits && !p?.e164) return;
+    const key = p.digits || p.e164;
+    const prev = phoneMap.get(key);
+    if (!prev || (p.confidence || 0) > (prev.confidence || 0)) phoneMap.set(key, p);
+  });
+  const phones = Array.from(phoneMap.values()).sort(
+    (a, b) => (b.confidence || 0) - (a.confidence || 0)
+  );
+  const emails = [...new Set([...(primary.emails || []), ...(secondary.emails || [])])];
 
-  const phoneScore = (phones) => {
-    const digits = phones?.[0]?.raw?.replace(/\D/g, '').length || 0;
-    return digits >= 10 ? digits + 20 : digits;
-  };
-
-  const pickPhones = (a, b) => (phoneScore(b) > phoneScore(a) ? b : a);
-
-  const emailScore = (emails) => {
-    const e = emails?.[0] || '';
-    if (!e.includes('@') || !e.includes('.')) return e.length;
-    return e.length + 30;
-  };
-
-  const pickEmails = (a, b) => (emailScore(b) > emailScore(a) ? b : a);
+  const field_confidence = { ...(primary.field_confidence || {}) };
+  Object.keys(secondary.field_confidence || {}).forEach((k) => {
+    field_confidence[k] = Math.max(field_confidence[k] || 0, secondary.field_confidence[k] || 0);
+  });
+  if (phones[0]) field_confidence.phone = phones[0].confidence || field_confidence.phone || 0;
+  if (emails[0]) field_confidence.email = 0.95;
 
   return {
-    person_name: pickStr(primary.person_name, secondary.person_name, 2),
-    designation: pickStr(primary.designation, secondary.designation, 2),
-    company: pickStr(primary.company, secondary.company, 3),
-    website: pickStr(primary.website, secondary.website, 4),
-    gstin: pickStr(primary.gstin, secondary.gstin, 15),
-    phones: pickPhones(primary.phones, secondary.phones),
-    emails: pickEmails(primary.emails, secondary.emails),
-    raw_address: pickStr(primary.raw_address, secondary.raw_address, 8),
-    tags: (primary.tags?.length > 1 ? primary : secondary).tags || ['Business Card']
+    person_name: pickStr('person_name', 2),
+    designation: pickStr('designation', 3),
+    company: pickStr('company', 3),
+    website: pickStr('website', 4),
+    gstin: pickStr('gstin', 15),
+    phones,
+    emails,
+    raw_address: pickStr('raw_address', 6),
+    city: pickStr('city', 2),
+    state: pickStr('state', 2),
+    pincode: pickStr('pincode', 6),
+    tags: (primary.tags?.length > 1 ? primary : secondary).tags || ['Business Card'],
+    field_confidence
   };
+}
+
+/** Create a brighter, higher-contrast canvas for OCR without mutating the original. */
+export async function preprocessImageForOcr(imageSource) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxW = 1600;
+        const scale = Math.min(1, maxW / img.width);
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const d = imageData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          const contrasted = Math.min(255, Math.max(0, (gray - 128) * 1.35 + 128));
+          d[i] = d[i + 1] = d[i + 2] = contrasted;
+        }
+        ctx.putImageData(imageData, 0, 0);
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      };
+      img.onerror = () => resolve(imageSource);
+      img.src = imageSource;
+    } catch (_) {
+      resolve(imageSource);
+    }
+  });
 }
 
 export async function extractCardWithTesseract(imageSource) {
   try {
-    // English-first — avoids Hindi/Tamil script garbage on English cards
-    const result = await Tesseract.recognize(imageSource, 'eng', {
+    const processed = await preprocessImageForOcr(imageSource);
+    const result = await Tesseract.recognize(processed, 'eng', {
       logger: (m) => {
         if (m.status === 'recognizing text') {
           console.log(`[OCR] ${(m.progress * 100).toFixed(0)}%`);
@@ -294,7 +407,9 @@ export async function extractCardWithTesseract(imageSource) {
     });
     const text = result.data?.text || '';
     console.log('[Raw OCR Text]:\n', text);
-    return parseBusinessCardText(text);
+    const parsed = parseBusinessCardText(text);
+    console.log('[Structured OCR]:', parsed);
+    return parsed;
   } catch (error) {
     console.warn('[Tesseract OCR Error]:', error);
     return parseBusinessCardText('');

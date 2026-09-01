@@ -8,6 +8,7 @@ export function Input({
   onChangeText,
   placeholder,
   error,
+  hint,
   leftIcon: LeftIcon,
   rightIcon: RightIcon,
   onRightIconPress,
@@ -45,7 +46,8 @@ export function Input({
           />
         )}
       </View>
-      {error && <Text style={styles.errorText}>{error}</Text>}
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {!error && hint ? <Text style={styles.hintText}>{hint}</Text> : null}
     </View>
   );
 }
@@ -64,9 +66,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    borderRadius: radii.md,
+    borderRadius: radii.input,
     paddingHorizontal: spacing.md,
     height: 48
   },
@@ -95,5 +97,11 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.danger,
     marginTop: spacing.xs
+  },
+  hintText: {
+    fontSize: 11,
+    color: colors.gold,
+    fontWeight: '600',
+    marginTop: 4
   }
 });

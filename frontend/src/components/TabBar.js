@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { ScanLine, FolderOpen, User, Store, Headphones, LayoutDashboard, Users, Building2, LifeBuoy } from 'lucide-react';
-import { colors, radii, spacing, shadows } from '../theme';
+import { ScanLine, FolderOpen, User, Store, Compass, LayoutDashboard, Users, Building2, LifeBuoy, Home } from 'lucide-react';
+import { colors, spacing, shadows } from '../theme';
 import { useAuth } from '../context/AuthContext';
 
 export function TabBar({ currentTab, onSelectTab }) {
@@ -17,12 +17,13 @@ export function TabBar({ currentTab, onSelectTab }) {
         { id: 'admin_profile', label: 'Profile', icon: User }
       ];
     }
+    // Home is a first-class destination. Profile is reached from Home — not via Scan.
     return [
-      { id: 'user_profile', label: 'Profile', icon: User },
+      { id: 'user_dashboard', label: 'Home', icon: Home },
       { id: 'user_vault', label: 'My Cards', icon: FolderOpen },
       { id: 'user_scan', label: 'SCAN', icon: ScanLine, isCenter: true },
       { id: 'user_my_business', label: 'My Business', icon: Store },
-      { id: 'user_support', label: 'Support', icon: Headphones }
+      { id: 'user_search', label: 'Browse', icon: Compass }
     ];
   };
 
@@ -62,7 +63,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'space-around',
     backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     paddingTop: 8,
     paddingBottom: 14,

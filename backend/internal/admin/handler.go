@@ -255,29 +255,32 @@ func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 	h.mu.RUnlock()
 
 	stats := map[string]interface{}{
-		"total_users":           1420 + totalUsers,
-		"active_businesses":     480 + totalBiz,
-		"verified_businesses":   342 + totalBiz,
+		"total_users":           totalUsers,
+		"total_people":          totalUsers,
+		"active_businesses":     totalBiz,
+		"total_businesses":      totalBiz,
+		"verified_businesses":   totalBiz,
 		"pending_verifications": pendingCount,
-		"total_cards_scanned":   18540,
-		"active_subscriptions":  184,
-		"mrr_inr":               74200,
-		"recent_activity": []map[string]interface{}{
-			{
-				"id":         uuid.New(),
-				"action":     "KYC_APPROVED",
-				"target":     "Raj Engineering Works",
-				"admin":      "Ajay",
-				"created_at": time.Now().Add(-15 * time.Minute),
-			},
-			{
-				"id":         uuid.New(),
-				"action":     "FREE_ACCESS_GRANTED",
-				"target":     "Rashiq Trading (1 Year Free)",
-				"admin":      "Govardhan",
-				"created_at": time.Now().Add(-45 * time.Minute),
-			},
-		},
+		"total_cards_scanned":   0,
+		"saved_cards":           0,
+		"active_subscriptions":  0,
+		"mrr_inr":               0,
+		"recent_activity": []map[string]interface{}{},
+	}
+
+	if h.db != nil && h.db.Pool != nil {
+		var people, businesses, cards, owners int
+		_ = h.db.Pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM users WHERE deleted_at IS NULL`).Scan(&people)
+		_ = h.db.Pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM businesses WHERE deleted_at IS NULL`).Scan(&businesses)
+		_ = h.db.Pool.QueryRow(r.Context(), `SELECT COUNT(*) FROM saved_cards WHERE deleted_at IS NULL`).Scan(&cards)
+		_ = h.db.Pool.QueryRow(r.Context(), `SELECT COUNT(DISTINCT owner_user_id) FROM businesses WHERE deleted_at IS NULL`).Scan(&owners)
+		stats["total_users"] = people
+		stats["total_people"] = people
+		stats["business_members"] = owners
+		stats["active_businesses"] = businesses
+		stats["total_businesses"] = businesses
+		stats["total_cards_scanned"] = cards
+		stats["saved_cards"] = cards
 	}
 
 	response.JSON(w, http.StatusOK, stats)

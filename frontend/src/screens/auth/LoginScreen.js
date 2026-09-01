@@ -1,14 +1,25 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, Animated } from 'react-native';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Button } from '../../components/Button';
 import { CardFlowLogo } from '../../components/CardFlowLogo';
-import { useAuth, DEV_TEST_ACCOUNTS } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
-export function LoginScreen({ onOtpRequested, onAdminConsole }) {
+export function LoginScreen({ onOtpRequested }) {
   const { sendOtp, isLoading } = useAuth();
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
+  const logoScale = useRef(new Animated.Value(0.94)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const contentY = useRef(new Animated.Value(12)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(logoScale, { toValue: 1, duration: 280, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: 320, useNativeDriver: true }),
+      Animated.timing(contentY, { toValue: 0, duration: 320, useNativeDriver: true })
+    ]).start();
+  }, [logoScale, contentOpacity, contentY]);
 
   const handleSendOtp = async (inputPhone) => {
     const targetPhone = (inputPhone || phone).trim();
@@ -16,18 +27,20 @@ export function LoginScreen({ onOtpRequested, onAdminConsole }) {
       setError('Enter a valid 10-digit mobile number');
       return;
     }
+    if (isLoading) return;
     setError('');
     const res = await sendOtp(targetPhone);
     if (res.success) onOtpRequested(targetPhone);
-    else setError(res.error || 'Failed to send OTP');
+    else setError(res.error || "Couldn't send OTP. Please try again.");
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <View style={styles.logoWrap}>
+      <Animated.View style={[styles.logoWrap, { transform: [{ scale: logoScale }], opacity: contentOpacity }]}>
         <CardFlowLogo size={52} />
-      </View>
+      </Animated.View>
 
+      <Animated.View style={{ width: '100%', alignItems: 'center', opacity: contentOpacity, transform: [{ translateY: contentY }] }}>
       <Text style={styles.title}>Welcome to CardFlow</Text>
       <Text style={styles.subtitle}>Your business connections, all in one place.</Text>
 
@@ -48,27 +61,21 @@ export function LoginScreen({ onOtpRequested, onAdminConsole }) {
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Button title="Send OTP" onPress={() => handleSendOtp()} loading={isLoading} size="lg" style={styles.cta} />
-
-      <TouchableOpacity onPress={onAdminConsole} style={styles.adminLink}>
-        <Text style={styles.adminText}>Admin console</Text>
-      </TouchableOpacity>
+      <Button
+        title={isLoading ? 'Sending OTP...' : 'Continue'}
+        onPress={() => handleSendOtp()}
+        loading={isLoading}
+        disabled={isLoading}
+        size="lg"
+        style={styles.cta}
+      />
 
       <Text style={styles.legal}>
         By continuing, you agree to{' '}
         <Text style={styles.legalGold}>Terms</Text> &{' '}
         <Text style={styles.legalGold}>Privacy Policy</Text>.
       </Text>
-
-      {/* Dev quick login — collapsed at bottom */}
-      <View style={styles.devSection}>
-        <Text style={styles.devLabel}>Demo accounts · OTP 123456</Text>
-        {Object.values(DEV_TEST_ACCOUNTS).slice(0, 4).map((acc) => (
-          <TouchableOpacity key={acc.phone} style={styles.devChip} onPress={() => { setPhone(acc.phone); handleSendOtp(acc.phone); }}>
-            <Text style={styles.devChipText}>{acc.name} · {acc.phone}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      </Animated.View>
     </ScrollView>
   );
 }

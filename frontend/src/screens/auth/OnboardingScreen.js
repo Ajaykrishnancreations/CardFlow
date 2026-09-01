@@ -8,13 +8,19 @@ export function OnboardingScreen() {
   const { completeOnboarding } = useAuth();
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!name.trim()) {
       setError('Please enter your name');
       return;
     }
-    completeOnboarding({ name: name.trim() });
+    setLoading(true);
+    try {
+      await completeOnboarding({ name: name.trim() });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -33,7 +39,7 @@ export function OnboardingScreen() {
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Button title="Continue" onPress={handleSubmit} size="lg" style={styles.cta} />
+      <Button title="Continue" onPress={handleSubmit} loading={loading} size="lg" style={styles.cta} />
     </ScrollView>
   );
 }

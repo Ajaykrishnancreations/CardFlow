@@ -54,9 +54,7 @@ func (h *CardHandler) CreateCard(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.svc.CreateSavedCard(r.Context(), user.ID, card)
 	if err != nil {
-		card.ID = uuid.New()
-		card.UserID = user.ID
-		response.JSON(w, http.StatusCreated, card)
+		response.InternalServerError(w, "failed to save card: "+err.Error())
 		return
 	}
 
@@ -147,7 +145,7 @@ func (h *CardHandler) GetOriginalImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, contentType, err := h.svc.GetOriginalImage(r.Context(), user.ID, cardID)
+	data, contentType, err := h.svc.GetOriginalImage(r.Context(), user.ID, cardID, r.URL.Query().Get("side"))
 	if err != nil || len(data) == 0 {
 		response.Error(w, http.StatusNotFound, "NOT_FOUND", "original card image not found", nil)
 		return
@@ -179,6 +177,7 @@ func (h *CardHandler) UploadOriginalImage(w http.ResponseWriter, r *http.Request
 
 	var req struct {
 		ImageData string `json:"image_data"`
+		Side      string `json:"side"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ImageData == "" {
 		response.BadRequest(w, "image_data required", "provide base64 data URL in image_data")
@@ -191,15 +190,41 @@ func (h *CardHandler) UploadOriginalImage(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.svc.persistOriginalImage(r.Context(), user.ID, cardID, raw, contentType); err != nil {
+	if err := h.svc.persistOriginalImage(r.Context(), user.ID, cardID, raw, contentType, req.Side); err != nil {
 		response.InternalServerError(w, "failed to save image: "+err.Error())
 		return
 	}
 
+	side := normalizeSide(req.Side)
 	response.JSON(w, http.StatusOK, map[string]interface{}{
-		"original_card_image_url": originalImageAPIPath(cardID.String()),
+		"original_card_image_url": originalImageAPIPath(cardID.String(), side),
+		"side":                    side,
 		"message":                 "original card image saved",
 	})
+}
+
+func (h *CardHandler) UpdateCard(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	cardID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid card id", err.Error())
+		return
+	}
+	var patch domain.SavedCard
+	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
+		response.BadRequest(w, "invalid request body", err.Error())
+		return
+	}
+	updated, err := h.svc.UpdateSavedCard(r.Context(), user.ID, cardID, patch)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), nil)
+		return
+	}
+	response.JSON(w, http.StatusOK, updated)
 }
 
 func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {

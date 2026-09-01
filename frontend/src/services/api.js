@@ -46,9 +46,10 @@ export async function fetchCardOriginalImageUrl(imagePathOrCardId, token) {
   }
 }
 
-export function cardOriginalImagePath(cardId) {
+export function cardOriginalImagePath(cardId, side = 'front') {
   if (!cardId) return '';
-  return `/api/v1/cards/${cardId}/original-image`;
+  const qs = side && side !== 'front' ? `?side=${side}` : '';
+  return `/api/v1/cards/${cardId}/original-image${qs}`;
 }
 
 // Normalizes 10-digit or raw numbers to E.164 (+91...)
@@ -74,10 +75,16 @@ export const apiClient = {
       });
       const data = await res.json();
       console.log('📥 [API RESPONSE] /auth/otp/send', data);
+      if (!res.ok) {
+        return {
+          status: 'error',
+          error: { message: data?.error?.message || "Couldn't send OTP. Please try again." }
+        };
+      }
       return data;
     } catch (e) {
       console.warn('API /auth/otp/send failed, falling back:', e);
-      return { status: 'success', data: { expires_in_seconds: 300, resend_cooldown_seconds: 30 } };
+      return { status: 'error', error: { message: "Couldn't send OTP. Please try again." } };
     }
   },
 
@@ -93,10 +100,16 @@ export const apiClient = {
       });
       const data = await res.json();
       console.log('📥 [API RESPONSE] /auth/otp/verify', data);
+      if (!res.ok) {
+        return {
+          status: 'error',
+          error: { message: data?.error?.message || data?.message || 'Invalid OTP. Please check the code and try again.' }
+        };
+      }
       return data;
     } catch (e) {
       console.warn('API /auth/otp/verify failed, falling back:', e);
-      return null;
+      return { status: 'error', error: { message: 'Something went wrong. Please try again.' } };
     }
   },
 
@@ -189,32 +202,62 @@ export const apiClient = {
       });
       const data = await res.json();
       console.log('📥 [API RESPONSE] /cards', data);
-      return data.data || data;
+      if (!res.ok) {
+        throw new Error(data?.error?.message || 'Could not save card');
+      }
+      const saved = data.data || data;
+      if (!saved?.id) {
+        throw new Error('Save succeeded without a card ID — please try again.');
+      }
+      return saved;
     } catch (e) {
       console.warn('API /cards failed:', e);
-      return cardData;
+      throw e;
     }
   },
 
-  async uploadCardOriginalImage(cardId, imageData, token = '') {
-    console.log('📡 [API CALL] POST /cards/{id}/original-image', cardId);
+  async uploadCardOriginalImage(cardId, imageData, token = '', side = 'front') {
+    console.log('📡 [API CALL] POST /cards/{id}/original-image', cardId, side);
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(`${API_BASE_URL}/cards/${cardId}/original-image`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ image_data: imageData })
+        body: JSON.stringify({ image_data: imageData, side: side || 'front' })
       });
-      const data = await res.json();
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch (_) {
+        throw new Error(
+          res.ok
+            ? 'Invalid response from image upload'
+            : `Image upload failed (${res.status}). Restart the local API if this persists.`
+        );
+      }
       if (!res.ok) {
-        throw new Error(data?.error?.message || data?.message || 'Image upload failed');
+        throw new Error(data?.error?.message || data?.message || `Image upload failed (${res.status})`);
       }
       return data.data || data;
     } catch (e) {
       console.warn('API upload original image failed:', e);
       throw e;
     }
+  },
+
+  async updateCard(cardId, cardData, token = '') {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/cards/${cardId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(cardData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not update card');
+    return data.data || data;
   },
 
   // 7. Get Saved Cards in Vault
@@ -225,7 +268,8 @@ export const apiClient = {
       if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(`${API_BASE_URL}/cards`, { headers });
       const data = await res.json();
-      return data.data?.cards || data.data || [];
+      const list = data.data?.cards || data.cards;
+      return Array.isArray(list) ? list : [];
     } catch (e) {
       console.warn('API /cards failed:', e);
       return [];
@@ -268,7 +312,7 @@ export const apiClient = {
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${API_BASE_URL}/admin/grant-access`, {
+      const res = await fetch(`${API_BASE_URL}/admin/users/grant-access`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
@@ -497,24 +541,77 @@ export const apiClient = {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          name: payload.business_name,
-          description: payload.category,
-          category_id: payload.category,
-          address_line1: payload.address,
+          name: payload.business_name || payload.name,
+          description: payload.description || payload.category,
+          category_id: payload.category_id || payload.category,
+          address_line1: payload.address || payload.address_line1,
+          locality: payload.area || payload.locality,
           city: payload.city,
           district: payload.district,
           state: payload.state,
+          pincode: payload.pincode,
           phone: payload.phone,
+          whatsapp: payload.whatsapp,
           email: payload.email,
           website: payload.website,
-          gstin: payload.gstin
+          gstin: payload.gstin,
+          services: payload.services,
+          front_image_data: payload.front_image_data,
+          back_image_data: payload.back_image_data
         })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || 'Could not create business');
       return data.data || data;
     } catch (e) {
       console.warn('API /owner/businesses failed:', e);
-      return null;
+      throw e;
     }
+  },
+
+  // 24. Owner: Update Business
+  async updateMyBusiness(id, payload, token = '') {
+    console.log('📡 [API CALL] PATCH /owner/businesses/' + id, payload);
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/owner/businesses/${id}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({
+        name: payload.business_name || payload.name,
+        description: payload.description,
+        category_id: payload.category_id || payload.category,
+        address_line1: payload.address || payload.address_line1,
+        locality: payload.area || payload.locality,
+        city: payload.city,
+        state: payload.state,
+        pincode: payload.pincode,
+        phone: payload.phone,
+        whatsapp: payload.whatsapp,
+        email: payload.email,
+        website: payload.website,
+        gstin: payload.gstin,
+        services: payload.services,
+        front_image_data: payload.front_image_data || undefined,
+        back_image_data: payload.back_image_data || undefined
+      })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not update business');
+    return data.data || data;
+  },
+
+  // 25. Owner: Upload / replace business card image (one side)
+  async uploadBusinessCardImage(id, side, imageData, token = '') {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/owner/businesses/${id}/card-image`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ side, image_data: imageData })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not upload card image');
+    return data.data || data;
   }
 };
