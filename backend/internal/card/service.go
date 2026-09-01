@@ -117,16 +117,21 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 						tRows.Close()
 					}
 
-					// Fetch original card image
+					// Fetch original card image metadata
 					var imgKey string
+					var hasImageData bool
 					_ = s.db.Pool.QueryRow(ctx, `
-						SELECT object_key FROM saved_card_images
+						SELECT object_key,
+						       (image_data IS NOT NULL AND length(image_data) > 0)
+						FROM saved_card_images
 						WHERE saved_card_id = $1 AND side = 'front'
 						ORDER BY created_at DESC LIMIT 1
-					`, c.ID).Scan(&imgKey)
-					if imgKey != "" {
+					`, c.ID).Scan(&imgKey, &hasImageData)
+					if imgKey != "" || hasImageData {
 						c.OriginalCardImageURL = originalImageAPIPath(c.ID.String())
-						c.FrontImageKey = &imgKey
+						if imgKey != "" {
+							c.FrontImageKey = &imgKey
+						}
 					}
 
 					// Parse GSTIN from notes if embedded
@@ -295,7 +300,14 @@ func (s *CardService) hasOriginalImage(cardID uuid.UUID) bool {
 	if s.db != nil && s.db.Pool != nil {
 		var exists bool
 		_ = s.db.Pool.QueryRow(context.Background(), `
-			SELECT EXISTS(SELECT 1 FROM saved_card_images WHERE saved_card_id = $1 AND side = 'front')
+			SELECT EXISTS(
+				SELECT 1 FROM saved_card_images
+				WHERE saved_card_id = $1 AND side = 'front'
+				  AND (
+				    (image_data IS NOT NULL AND length(image_data) > 0)
+				    OR object_key <> ''
+				  )
+			)
 		`, cardID).Scan(&exists)
 		if exists {
 			return true
@@ -336,10 +348,13 @@ func (s *CardService) persistOriginalImage(ctx context.Context, userID, cardID u
 		_, _ = s.db.Pool.Exec(ctx, `
 			DELETE FROM saved_card_images WHERE saved_card_id = $1 AND side = 'front'
 		`, cardID)
-		_, _ = s.db.Pool.Exec(ctx, `
-			INSERT INTO saved_card_images (id, saved_card_id, side, object_key, bytes)
-			VALUES ($1, $2, 'front', $3, $4)
-		`, uuid.New(), cardID, objectKey, len(data))
+		_, err := s.db.Pool.Exec(ctx, `
+			INSERT INTO saved_card_images (id, saved_card_id, side, object_key, bytes, image_data, content_type)
+			VALUES ($1, $2, 'front', $3, $4, $5, $6)
+		`, uuid.New(), cardID, objectKey, len(data), data, contentType)
+		if err != nil {
+			return fmt.Errorf("save image to database: %w", err)
+		}
 	}
 	return nil
 }
@@ -352,17 +367,25 @@ func (s *CardService) GetOriginalImage(ctx context.Context, userID, cardID uuid.
 	}
 	s.imageMutex.RUnlock()
 
-	var objectKey string
 	if s.db != nil && s.db.Pool != nil {
-		_ = s.db.Pool.QueryRow(ctx, `
-			SELECT object_key FROM saved_card_images
+		var imageData []byte
+		var contentType string
+		var objectKey string
+		err := s.db.Pool.QueryRow(ctx, `
+			SELECT image_data, COALESCE(NULLIF(content_type, ''), 'image/jpeg'), object_key
+			FROM saved_card_images
 			WHERE saved_card_id = $1 AND side = 'front'
 			ORDER BY created_at DESC LIMIT 1
-		`, cardID).Scan(&objectKey)
-	}
-
-	if objectKey != "" && s.s3 != nil {
-		return s.s3.GetObject(ctx, objectKey)
+		`, cardID).Scan(&imageData, &contentType, &objectKey)
+		if err == nil && len(imageData) > 0 {
+			if contentType == "" {
+				contentType = "image/jpeg"
+			}
+			return imageData, contentType, nil
+		}
+		if err == nil && objectKey != "" && s.s3 != nil {
+			return s.s3.GetObject(ctx, objectKey)
+		}
 	}
 
 	localPath := s.localImagePath(userID.String(), cardID.String())

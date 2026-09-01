@@ -26,11 +26,15 @@ export function resolveApiUrl(path) {
 }
 
 /** Fetch authenticated original card image and return a blob URL for <img src> */
-export async function fetchCardOriginalImageUrl(imagePath, token) {
-  if (!imagePath || !token) return null;
-  if (imagePath.startsWith('data:') || imagePath.startsWith('blob:')) return imagePath;
-  const url = resolveApiUrl(imagePath);
-  if (!url.includes('/original-image')) return url;
+export async function fetchCardOriginalImageUrl(imagePathOrCardId, token) {
+  if (!token) return null;
+  let path = imagePathOrCardId;
+  if (path && !path.includes('/') && !path.startsWith('data:')) {
+    path = `/api/v1/cards/${path}/original-image`;
+  }
+  if (!path) return null;
+  if (path.startsWith('data:') || path.startsWith('blob:')) return path;
+  const url = resolveApiUrl(path);
   try {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return null;
@@ -40,6 +44,11 @@ export async function fetchCardOriginalImageUrl(imagePath, token) {
     console.warn('Could not load original card image', e);
     return null;
   }
+}
+
+export function cardOriginalImagePath(cardId) {
+  if (!cardId) return '';
+  return `/api/v1/cards/${cardId}/original-image`;
 }
 
 // Normalizes 10-digit or raw numbers to E.164 (+91...)
@@ -188,10 +197,13 @@ export const apiClient = {
         body: JSON.stringify({ image_data: imageData })
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error?.message || data?.message || 'Image upload failed');
+      }
       return data.data || data;
     } catch (e) {
       console.warn('API upload original image failed:', e);
-      return null;
+      throw e;
     }
   },
 

@@ -16,8 +16,7 @@ import { Card } from '../../components/Card';
 import { Button } from '../../components/Button';
 import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 import { useAuth } from '../../context/AuthContext';
-import { getCardImage } from '../../utils/cardImageStore';
-import { fetchCardOriginalImageUrl, resolveApiUrl } from '../../services/api';
+import { fetchCardOriginalImageUrl, cardOriginalImagePath, apiClient } from '../../services/api';
 
 function hasWhatsApp(phones) {
   const p = phones?.[0];
@@ -28,36 +27,33 @@ export function SavedCardDetailScreen({ card, onBack }) {
   const { user, token } = useAuth();
   const [viewMode, setViewMode] = useState('digital');
   const [originalImageUrl, setOriginalImageUrl] = useState(null);
+  const [imageLoading, setImageLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef(null);
 
   useEffect(() => {
     let blobUrl = null;
     let cancelled = false;
 
     const loadImage = async () => {
-      const ref =
+      if (!card?.id || !token) {
+        if (!cancelled) {
+          setOriginalImageUrl(null);
+          setImageLoading(false);
+        }
+        return;
+      }
+
+      setImageLoading(true);
+      const path =
         card.original_card_image_url ||
         card.originalCardImageUrl ||
-        getCardImage(user?.phone, card.id);
-
-      if (!ref) {
-        if (!cancelled) setOriginalImageUrl(null);
-        return;
-      }
-
-      if (ref.startsWith('data:') || ref.startsWith('blob:')) {
-        if (!cancelled) setOriginalImageUrl(ref);
-        return;
-      }
-
-      if (ref.includes('/original-image') && token) {
-        const url = await fetchCardOriginalImageUrl(ref, token);
-        blobUrl = url;
-        if (!cancelled) setOriginalImageUrl(url);
-        return;
-      }
-
+        cardOriginalImagePath(card.id);
+      const url = await fetchCardOriginalImageUrl(path, token);
+      blobUrl = url;
       if (!cancelled) {
-        setOriginalImageUrl(ref.startsWith('http') ? ref : resolveApiUrl(ref));
+        setOriginalImageUrl(url);
+        setImageLoading(false);
       }
     };
 
@@ -69,7 +65,25 @@ export function SavedCardDetailScreen({ card, onBack }) {
         URL.revokeObjectURL(blobUrl);
       }
     };
-  }, [card.id, card.original_card_image_url, card.originalCardImageUrl, token, user?.phone]);
+  }, [card?.id, card.original_card_image_url, card.originalCardImageUrl, token]);
+
+  const handleUploadOriginal = (file) => {
+    if (!file || !card?.id || !token) return;
+    setUploading(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        await apiClient.uploadCardOriginalImage(card.id, ev.target.result, token);
+        const url = await fetchCardOriginalImageUrl(cardOriginalImagePath(card.id), token);
+        setOriginalImageUrl(url);
+      } catch (err) {
+        alert(err.message || 'Could not upload original card image.');
+      } finally {
+        setUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (!card) return null;
 
@@ -160,12 +174,34 @@ export function SavedCardDetailScreen({ card, onBack }) {
         </Card>
       ) : (
         <View style={styles.originalWrap}>
-          {originalImageUrl ? (
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              if (e.target.files?.[0]) handleUploadOriginal(e.target.files[0]);
+              e.target.value = '';
+            }}
+          />
+          {imageLoading ? (
+            <View style={styles.noImage}>
+              <Text style={styles.noImageText}>Loading original card…</Text>
+            </View>
+          ) : originalImageUrl ? (
             <img src={originalImageUrl} alt="Original business card" style={styles.originalImg} />
           ) : (
             <View style={styles.noImage}>
               <ImageIcon size={40} color={colors.textMuted} />
-              <Text style={styles.noImageText}>Original card image not available</Text>
+              <Text style={styles.noImageText}>Original card image not saved yet</Text>
+              <Button
+                title={uploading ? 'Uploading…' : 'Upload Original Card'}
+                variant="outline"
+                size="sm"
+                loading={uploading}
+                onPress={() => fileInputRef.current && fileInputRef.current.click()}
+                style={{ marginTop: spacing.md }}
+              />
             </View>
           )}
         </View>

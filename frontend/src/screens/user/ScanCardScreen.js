@@ -25,7 +25,6 @@ import { Input } from '../../components/Input';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 import { extractCardWithTesseract, mergeExtractions } from '../../utils/ocrParser';
-import { saveCardImage } from '../../utils/cardImageStore';
 import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 
 function applyExtractionToForm(data, setters) {
@@ -308,7 +307,6 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
       gstin: gstin,
       notes: notes || 'Live visiting card scanned and verified in CardFlow',
       met_context: isDesktop ? 'Desktop Scanner / Upload' : 'Mobile Camera Scan',
-      original_card_image_url: selectedImage || '',
       phones: phone
         ? [
             {
@@ -324,24 +322,27 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
       tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : ['Business Card']
     };
 
-    const saved = await apiClient.saveCard(cardPayload, token);
-    const cardId = saved?.id || Date.now().toString();
+    try {
+      const saved = await apiClient.saveCard(cardPayload, token);
+      const cardId = saved?.id;
+      if (!cardId) {
+        throw new Error('Could not save card — no card ID returned.');
+      }
 
-    if (selectedImage && saved?.id && !saved?.original_card_image_url) {
-      await apiClient.uploadCardOriginalImage(saved.id, selectedImage, token);
+      if (selectedImage) {
+        await apiClient.uploadCardOriginalImage(cardId, selectedImage, token);
+      }
+
+      await loadUserVault(token);
+      setIsSaving(false);
+      setSuccessMsg('Card and original image saved to your vault!');
+      setTimeout(() => {
+        if (onCardSaved) onCardSaved({ ...saved, original_card_image_url: `/api/v1/cards/${cardId}/original-image` });
+      }, 1200);
+    } catch (err) {
+      setIsSaving(false);
+      alert(err.message || 'Failed to save card. Please try again.');
     }
-
-    if (selectedImage && user?.phone) {
-      saveCardImage(user.phone, cardId, selectedImage);
-    }
-    await loadUserVault(token);
-
-    setIsSaving(false);
-    setSuccessMsg('Card details saved to your database vault successfully!');
-
-    setTimeout(() => {
-      if (onCardSaved) onCardSaved(saved);
-    }, 1200);
   };
 
   const handleRetake = () => {

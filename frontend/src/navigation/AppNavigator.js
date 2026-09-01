@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from '../components/Layout';
 import { TabBar } from '../components/TabBar';
+import { AdminTopBar } from '../components/AdminTopBar';
 
 import { SplashScreen } from '../screens/auth/SplashScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
@@ -148,6 +149,7 @@ export function AppNavigator() {
 
   return (
     <Layout
+      header={role === 'admin' ? <AdminTopBar /> : null}
       footer={
         <TabBar
           currentTab={currentTab}
