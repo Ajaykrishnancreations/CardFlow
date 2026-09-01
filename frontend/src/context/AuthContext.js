@@ -368,6 +368,31 @@ export function AuthProvider({ children }) {
     } catch (e) {}
   };
 
+  const updateProfile = useCallback(async (fields) => {
+    const payload = {
+      name: fields.name,
+      email: fields.email || null,
+      city: fields.city,
+      state: fields.state
+    };
+    let updated = null;
+    if (token) {
+      updated = await apiClient.updateProfile(payload, token);
+    }
+    const merged = {
+      ...user,
+      name: updated?.name ?? fields.name ?? user?.name,
+      email: updated?.email ?? fields.email ?? user?.email,
+      city: updated?.city ?? fields.city ?? user?.city,
+      state: updated?.state ?? fields.state ?? user?.state
+    };
+    setUser(merged);
+    try {
+      localStorage.setItem('cf_user', JSON.stringify(merged));
+    } catch (e) {}
+    return merged;
+  }, [user, token]);
+
   // Helper to check if a business is already saved in this user's vault
   const isBusinessSaved = useCallback((biz) => {
     if (!biz || !savedCards || savedCards.length === 0) return false;
@@ -475,6 +500,7 @@ export function AuthProvider({ children }) {
         sendOtp,
         verifyOtp,
         completeOnboarding,
+        updateProfile,
         logout,
         switchActiveBusiness,
         switchToOwnerMode,

@@ -100,6 +100,28 @@ export const apiClient = {
     }
   },
 
+  async getMe(token = '') {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/users/me`, { headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Failed to load profile');
+    return data.data || data;
+  },
+
+  async updateProfile(payload, token = '') {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/users/me`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Profile update failed');
+    return data.data || data;
+  },
+
   // 3. Discovery: Categories
   async getCategories() {
     console.log('📡 [API CALL] GET /categories');

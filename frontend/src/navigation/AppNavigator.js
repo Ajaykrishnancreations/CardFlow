@@ -23,6 +23,7 @@ import { AdminDashboardScreen } from '../screens/admin/AdminDashboardScreen';
 import { AdminUsersScreen } from '../screens/admin/AdminUsersScreen';
 import { AdminBusinessesScreen } from '../screens/admin/AdminBusinessesScreen';
 import { AdminSupportScreen } from '../screens/admin/AdminSupportScreen';
+import { AdminProfileScreen } from '../screens/admin/AdminProfileScreen';
 
 import { DEV_TEST_ACCOUNTS } from '../context/AuthContext';
 
@@ -108,6 +109,7 @@ export function AppNavigator() {
         case 'admin_users': return <AdminUsersScreen />;
         case 'admin_businesses': return <AdminBusinessesScreen />;
         case 'admin_support': return <AdminSupportScreen />;
+        case 'admin_profile': return <AdminProfileScreen />;
         default: return <AdminDashboardScreen onNavigate={navigateTo} />;
       }
     }

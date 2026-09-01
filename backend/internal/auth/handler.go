@@ -125,20 +125,13 @@ func (h *AuthHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name != nil {
-		user.Name = *req.Name
-	}
-	if req.Email != nil {
-		user.Email = req.Email
-	}
-	if req.City != nil {
-		user.City = *req.City
-	}
-	if req.State != nil {
-		user.State = *req.State
+	updated, err := h.authSvc.UpdateUserProfile(r.Context(), user, req)
+	if err != nil {
+		response.InternalServerError(w, "failed to update profile: "+err.Error())
+		return
 	}
 
-	response.JSON(w, http.StatusOK, user)
+	response.JSON(w, http.StatusOK, updated)
 }
 
 func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) {

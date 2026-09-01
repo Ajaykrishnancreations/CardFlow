@@ -13,7 +13,8 @@ export function TabBar({ currentTab, onSelectTab }) {
         { id: 'admin_dashboard', label: 'Overview', icon: LayoutDashboard },
         { id: 'admin_users', label: 'People', icon: Users },
         { id: 'admin_businesses', label: 'Businesses', icon: Building2 },
-        { id: 'admin_support', label: 'Support', icon: LifeBuoy }
+        { id: 'admin_support', label: 'Support', icon: LifeBuoy },
+        { id: 'admin_profile', label: 'Profile', icon: User }
       ];
     }
     return [
