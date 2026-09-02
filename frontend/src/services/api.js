@@ -263,17 +263,15 @@ export const apiClient = {
   // 7. Get Saved Cards in Vault
   async getCards(token = '') {
     console.log('📡 [API CALL] GET /cards');
-    try {
-      const headers = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${API_BASE_URL}/cards`, { headers });
-      const data = await res.json();
-      const list = data.data?.cards || data.cards;
-      return Array.isArray(list) ? list : [];
-    } catch (e) {
-      console.warn('API /cards failed:', e);
-      return [];
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/cards`, { headers });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data?.error?.message || 'Could not load saved cards');
     }
+    const list = data.data?.cards || data.cards;
+    return Array.isArray(list) ? list : [];
   },
 
   // 8. Admin: Dashboard Stats

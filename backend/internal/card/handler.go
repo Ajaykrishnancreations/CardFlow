@@ -29,7 +29,11 @@ func (h *CardHandler) ListCards(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cards, err := h.svc.GetSavedCards(r.Context(), user.ID)
-	if err != nil || cards == nil {
+	if err != nil {
+		response.InternalServerError(w, "failed to load cards: "+err.Error())
+		return
+	}
+	if cards == nil {
 		cards = []domain.SavedCard{}
 	}
 

@@ -91,9 +91,10 @@ type Config struct {
 }
 
 func Load() *Config {
-	// Try loading .env from current directory or parent directory
-	_ = godotenv.Load(".env")
-	_ = godotenv.Load("../.env")
+	// Try loading .env from common working directories (repo root, backend/, or cwd)
+	for _, path := range []string{".env", "../.env", "backend/.env", "../backend/.env"} {
+		_ = godotenv.Load(path)
+	}
 
 	cfg := &Config{
 		Port:         getEnv("PORT", "8080"),

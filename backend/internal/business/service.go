@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 
 	"cardflow-backend/internal/database"
 	"cardflow-backend/internal/domain"
@@ -12,11 +14,56 @@ import (
 )
 
 type BusinessService struct {
-	db *database.DB
+	db         *database.DB
+	latLngOnce sync.Once
+	latLngMode bool
 }
 
 func NewBusinessService(db *database.DB) *BusinessService {
 	return &BusinessService{db: db}
+}
+
+func (s *BusinessService) usesLatLngColumns(ctx context.Context) bool {
+	s.latLngOnce.Do(func() {
+		if s.db == nil || s.db.Pool == nil {
+			return
+		}
+		var ok bool
+		_ = s.db.Pool.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'businesses' AND column_name = 'latitude'
+			)
+		`).Scan(&ok)
+		s.latLngMode = ok
+	})
+	return s.latLngMode
+}
+
+func (s *BusinessService) resolveCategoryID(ctx context.Context, raw string) uuid.UUID {
+	if id, err := uuid.Parse(raw); err == nil {
+		return id
+	}
+	if s.db != nil && s.db.Pool != nil {
+		var id uuid.UUID
+		slug := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(raw), " ", "-"))
+		err := s.db.Pool.QueryRow(ctx, `
+			SELECT id FROM categories
+			WHERE LOWER(name) = LOWER($1) OR LOWER(slug) = LOWER($2)
+			LIMIT 1
+		`, raw, slug).Scan(&id)
+		if err == nil {
+			return id
+		}
+	}
+	return uuid.MustParse("c0000000-0000-0000-0000-000000000001")
+}
+
+func (s *BusinessService) businessCoordSelectSQL(ctx context.Context) string {
+	if s.usesLatLngColumns(ctx) {
+		return "b.latitude as lat, b.longitude as lng"
+	}
+	return "ST_Y(b.location::geometry) as lat, ST_X(b.location::geometry) as lng"
 }
 
 type CreateBusinessInput struct {
@@ -88,11 +135,11 @@ func (s *BusinessService) GetOwnerBusinesses(ctx context.Context, ownerUserID uu
 
 	rows, err := s.db.Pool.Query(ctx, `
 		SELECT b.id, b.owner_user_id, b.name, b.slug, COALESCE(b.description, ''), b.primary_category_id,
-		       c.name as cat_name, b.address_line1, b.city, b.state, b.pincode,
-		       ST_Y(b.location::geometry) as lat, ST_X(b.location::geometry) as lng,
+		       COALESCE(c.name, ''), b.address_line1, b.city, b.state, b.pincode,
+		       `+s.businessCoordSelectSQL(ctx)+`,
 		       b.status::text, b.verification::text, b.listing::text, b.completeness, b.created_at, b.updated_at
 		FROM businesses b
-		JOIN categories c ON c.id = b.primary_category_id
+		LEFT JOIN categories c ON c.id = b.primary_category_id
 		WHERE b.owner_user_id = $1 AND b.status != 'removed'
 		ORDER BY b.created_at DESC
 	`, ownerUserID)
@@ -131,11 +178,7 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, ownerUserID uuid.U
 	slug := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(in.Name), " ", "-")) + "-" + uuid.New().String()[:4]
 	newID := uuid.New()
 
-	catUUID, err := uuid.Parse(in.CategoryID)
-	if err != nil {
-		// default to manufacturing category
-		catUUID = uuid.MustParse("c0000000-0000-0000-0000-000000000001")
-	}
+	catUUID := s.resolveCategoryID(ctx, in.CategoryID)
 
 	if in.Latitude == 0 && in.Longitude == 0 {
 		in.Latitude = 11.0168
@@ -156,22 +199,47 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, ownerUserID uuid.U
 	}
 
 	if s.db != nil && s.db.Pool != nil {
-		_, err := s.db.Pool.Exec(ctx, `
-			INSERT INTO businesses (
-				id, owner_user_id, name, slug, description, primary_category_id,
-				address_line1, locality, city, state, pincode, country,
-				location, website, email, gstin, status, verification, listing, completeness
-			) VALUES (
-				$1, $2, $3, $4, $5, $6,
-				$7, $8, $9, $10, $11, 'IN',
-				ST_SetSRID(ST_MakePoint($12, $13), 4326)::geography,
-				$14, $15, $16, 'live', 'pending', 'listed', 80
+		_, _ = s.db.Pool.Exec(ctx, `
+			INSERT INTO users (id, phone, name, city, state, country, role, plan, status, free_scans_remaining)
+			VALUES ($1, '+910000000000', 'CardFlow User', 'Coimbatore', 'Tamil Nadu', 'IN', 'user', 'free', 'active', 30)
+			ON CONFLICT (id) DO NOTHING
+		`, ownerUserID)
+
+		var err error
+		if s.usesLatLngColumns(ctx) {
+			_, err = s.db.Pool.Exec(ctx, `
+				INSERT INTO businesses (
+					id, owner_user_id, name, slug, description, primary_category_id,
+					address_line1, locality, city, state, pincode, country,
+					latitude, longitude, website, email, gstin, status, verification, listing, completeness
+				) VALUES (
+					$1, $2, $3, $4, $5, $6,
+					$7, $8, $9, $10, $11, 'IN',
+					$12, $13, $14, $15, $16, 'live', 'pending', 'listed', 80
+				)
+			`, newID, ownerUserID, in.Name, slug, in.Description, catUUID,
+				in.AddressLine1, in.Locality, in.City, in.State, in.Pincode,
+				in.Latitude, in.Longitude,
+				in.Website, in.Email, in.GSTIN,
 			)
-		`, newID, ownerUserID, in.Name, slug, in.Description, catUUID,
-			in.AddressLine1, in.Locality, in.City, in.State, in.Pincode,
-			in.Longitude, in.Latitude,
-			in.Website, in.Email, in.GSTIN,
-		)
+		} else {
+			_, err = s.db.Pool.Exec(ctx, `
+				INSERT INTO businesses (
+					id, owner_user_id, name, slug, description, primary_category_id,
+					address_line1, locality, city, state, pincode, country,
+					location, website, email, gstin, status, verification, listing, completeness
+				) VALUES (
+					$1, $2, $3, $4, $5, $6,
+					$7, $8, $9, $10, $11, 'IN',
+					ST_SetSRID(ST_MakePoint($12, $13), 4326)::geography,
+					$14, $15, $16, 'live', 'pending', 'listed', 80
+				)
+			`, newID, ownerUserID, in.Name, slug, in.Description, catUUID,
+				in.AddressLine1, in.Locality, in.City, in.State, in.Pincode,
+				in.Longitude, in.Latitude,
+				in.Website, in.Email, in.GSTIN,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +247,8 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, ownerUserID uuid.U
 		// Insert digital card
 		_, _ = s.db.Pool.Exec(ctx, `
 			INSERT INTO digital_cards (business_id, template, brand_color, qr_slug)
-			VALUES ($1, 'modern', '#1E40AF', $2)
+			VALUES ($1, 'modern', '#32145F', $2)
+			ON CONFLICT (business_id) DO NOTHING
 		`, newID, slug)
 
 		// Insert phone
@@ -195,8 +264,24 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, ownerUserID uuid.U
 				VALUES ($1, $2, TRUE, FALSE)
 			`, newID, in.WhatsApp)
 		}
-		_ = s.persistCardImage(ctx, newID, "front", in.FrontImageData)
-		_ = s.persistCardImage(ctx, newID, "back", in.BackImageData)
+		for _, svc := range in.Services {
+			if strings.TrimSpace(svc) == "" {
+				continue
+			}
+			_, _ = s.db.Pool.Exec(ctx, `
+				INSERT INTO business_services (id, business_id, name) VALUES ($1, $2, $3)
+			`, uuid.New(), newID, svc)
+		}
+		if in.FrontImageData != "" {
+			if err := s.persistCardImage(ctx, newID, "front", in.FrontImageData); err != nil {
+				return nil, fmt.Errorf("save front card image: %w", err)
+			}
+		}
+		if in.BackImageData != "" {
+			if err := s.persistCardImage(ctx, newID, "back", in.BackImageData); err != nil {
+				return nil, fmt.Errorf("save back card image: %w", err)
+			}
+		}
 	}
 
 	biz := &domain.Business{

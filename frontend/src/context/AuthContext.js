@@ -133,9 +133,14 @@ export function AuthProvider({ children }) {
       setSavedCards([]);
       return;
     }
-    const cards = await apiClient.getCards(currentToken);
-    if (cards && Array.isArray(cards)) {
-      setSavedCards(cards);
+    try {
+      const cards = await apiClient.getCards(currentToken);
+      if (cards && Array.isArray(cards)) {
+        setSavedCards(cards);
+      }
+    } catch (e) {
+      console.warn('Could not load saved cards from database', e);
+      setSavedCards([]);
     }
   }, [token]);
 

@@ -99,7 +99,8 @@ func main() {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(chiMiddleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
-	r.Use(chiMiddleware.Timeout(30 * time.Second))
+	r.Use(chiMiddleware.Timeout(60 * time.Second))
+	r.Use(chiMiddleware.RequestSize(32 << 20)) // 32MB for card/business image uploads
 
 	// CORS Configuration (Permissive for Web Browsers & Testing)
 	r.Use(cors.Handler(cors.Options{
