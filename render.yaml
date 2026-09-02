@@ -1,0 +1,31 @@
+# Render Blueprint — CardFlow API
+# Docs: docs/FREE_HOSTING_GUIDE.md
+#
+# REQUIRED: Create a free Postgres on Neon (https://neon.tech) or Supabase,
+# then set DATABASE_URL in the Render dashboard before cards will save.
+
+services:
+  - type: web
+    name: cardflow-api
+    runtime: go
+    rootDir: backend
+    buildCommand: go build -o server ./cmd/api
+    startCommand: ./server
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: production
+      - key: PORT
+        value: "8080"
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_PRIVATE_KEY
+        generateValue: true
+      - key: DEV_MOCK_SMS
+        value: "true"
+      - key: DEV_MOCK_GEMINI
+        value: "true"
+      - key: ALLOWED_ORIGINS
+        value: https://card-flow-kappa.vercel.app,https://cardflow-api-fsij.onrender.com

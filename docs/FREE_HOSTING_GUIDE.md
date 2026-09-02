@@ -75,20 +75,16 @@ This guide shows you how to host the **Go Backend**, **PostgreSQL + PostGIS Data
 
 | Key | Value | Description |
 | :--- | :--- | :--- |
-| `ENV` | `development` (or `production` when ready) | App environment |
+| **`DATABASE_URL`** | `postgres://user:pass@host/db?sslmode=require` | **Required for scan/save.** Full URI from Neon or Supabase (see Step 1) |
+| `ENV` | `production` | App environment |
 | `PORT` | `8080` | Render port |
-| `DB_HOST` | `aws-0-ap-south-1.pooler.supabase.com` | From Supabase URI |
-| `DB_PORT` | `6543` (or `5432`) | From Supabase URI |
-| `DB_USER` | `postgres.[YOUR_PROJECT_REF]` | From Supabase URI |
-| `DB_PASSWORD` | `[YOUR_SUPABASE_PASSWORD]` | From Supabase |
-| `DB_NAME` | `postgres` | Default database name |
-| `DB_SSL_MODE` | `require` | Required for Supabase |
-| `REDIS_HOST` | `[UPSTASH_ENDPOINT]` | From Upstash |
-| `REDIS_PORT` | `6379` | From Upstash |
-| `REDIS_PASSWORD` | `[UPSTASH_PASSWORD]` | From Upstash |
+| `REDIS_URL` | `rediss://...` (optional) | From Upstash — OTP works without it in dev mock mode |
 | `JWT_PRIVATE_KEY` | `any-random-32-char-secret-key-goes-here` | Secret signing key |
 | `DEV_MOCK_SMS` | `true` | Allows fixed dev OTP (123456) for instant testing |
 | `DEV_MOCK_GEMINI` | `true` | Allows instant AI business card extraction |
+| `ALLOWED_ORIGINS` | `https://your-vercel-app.vercel.app` | Your frontend URL |
+
+> **Important:** Without `DATABASE_URL`, login works but **scan/save card will fail**. After adding it, click **Manual Deploy → Clear build cache & deploy**.
 
 7. Click **"Create Web Service"**.
 8. Render will build the Go app and give you a live URL like:
@@ -106,7 +102,7 @@ Once deployed, you can verify your live backend in Chrome or via cURL:
    ```text
    https://cardflow-api.onrender.com/health
    ```
-   *Expected Response:* `{"data":{"env":"development","status":"healthy","version":"1.0.0"},"status":"success"}`
+   *Expected Response:* `{"data":{"database":"connected","status":"healthy",...},"status":"success"}` — if `"database":"disconnected"`, add `DATABASE_URL` and redeploy.
 
 2. **Public business profile in Chrome**:
    ```text

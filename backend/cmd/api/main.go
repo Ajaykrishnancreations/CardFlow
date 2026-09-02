@@ -51,7 +51,15 @@ func main() {
 		slog.Warn("PostgreSQL pool initialization note", "error", err)
 	} else {
 		defer dbPool.Close()
-		_ = database.RunMigrations(ctx, dbPool)
+		if migErr := database.RunMigrations(ctx, dbPool); migErr != nil {
+			slog.Error("Database migrations failed", "error", migErr)
+		}
+	}
+
+	if dbPool == nil || dbPool.Pool == nil {
+		slog.Error("PostgreSQL is NOT connected — card save, business post, and vault will fail. Set DATABASE_URL in Render Environment (Neon/Supabase free tier). See docs/FREE_HOSTING_GUIDE.md")
+	} else {
+		slog.Info("PostgreSQL ready for card vault and business persistence")
 	}
 
 	redisClient, err := database.NewRedisClient(ctx, cfg)
@@ -114,11 +122,20 @@ func main() {
 
 	// Health Check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		dbStatus := "disconnected"
+		if dbPool != nil && dbPool.Pool != nil {
+			pingCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			if dbPool.Pool.Ping(pingCtx) == nil {
+				dbStatus = "connected"
+			}
+			cancel()
+		}
 		response.JSON(w, http.StatusOK, map[string]interface{}{
 			"status":    "healthy",
 			"timestamp": time.Now(),
 			"version":   "1.0.0",
 			"env":       cfg.Env,
+			"database":  dbStatus,
 		})
 	})
 	r.Head("/health", func(w http.ResponseWriter, r *http.Request) {

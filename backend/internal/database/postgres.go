@@ -4,11 +4,27 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"cardflow-backend/internal/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func normalizeDatabaseURL(connStr string) string {
+	connStr = strings.TrimSpace(connStr)
+	if connStr == "" {
+		return connStr
+	}
+	if !strings.Contains(connStr, "sslmode=") {
+		sep := "?"
+		if strings.Contains(connStr, "?") {
+			sep = "&"
+		}
+		connStr += sep + "sslmode=require"
+	}
+	return connStr
+}
 
 type DB struct {
 	Pool *pgxpool.Pool
@@ -17,7 +33,7 @@ type DB struct {
 func NewPostgresPool(ctx context.Context, cfg *config.Config) (*DB, error) {
 	var connStr string
 	if cfg.DatabaseURL != "" {
-		connStr = cfg.DatabaseURL
+		connStr = normalizeDatabaseURL(cfg.DatabaseURL)
 	} else {
 		connStr = fmt.Sprintf(
 			"postgres://%s:%s@%s:%s/%s?sslmode=%s",

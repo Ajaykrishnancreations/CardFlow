@@ -43,7 +43,7 @@ func (s *CardService) dbReady() bool {
 
 func (s *CardService) requireDB() error {
 	if !s.dbReady() {
-		return fmt.Errorf("database unavailable: card vault requires PostgreSQL")
+		return fmt.Errorf("server database not configured — admin must set DATABASE_URL on Render and redeploy")
 	}
 	return nil
 }
