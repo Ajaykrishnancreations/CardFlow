@@ -2,11 +2,10 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { mockBusinesses } from '../data/mockData';
 import { apiClient } from '../services/api';
 
-// Fixed Development Test Accounts
+// Development account metadata (role hints only — OTP is always generated server-side)
 export const DEV_TEST_ACCOUNTS = {
   ADMIN_AJAY: {
     phone: '6382124970',
-    otp: '123456',
     role: 'admin',
     name: 'Ajay',
     email: 'ajay@cardflow.app',
@@ -17,35 +16,8 @@ export const DEV_TEST_ACCOUNTS = {
     credits: 9999,
     isIdVerified: true
   },
-  ADMIN_GOVARDHAN: {
-    phone: '9008722766',
-    otp: '123456',
-    role: 'admin',
-    name: 'Govardhan',
-    email: 'govardhan@cardflow.app',
-    city: 'Bengaluru',
-    state: 'Karnataka',
-    plan: 'premium',
-    freeScansRemaining: 9999,
-    credits: 9999,
-    isIdVerified: true
-  },
-  ADMIN_SUPERVISOR: {
-    phone: '9999988888',
-    otp: '123456',
-    role: 'admin',
-    name: 'Admin Supervisor',
-    email: 'admin@cardflow.app',
-    city: 'Coimbatore',
-    state: 'Tamil Nadu',
-    plan: 'premium',
-    freeScansRemaining: 999,
-    credits: 999,
-    isIdVerified: true
-  },
   BUSINESS_OWNER_RAJ: {
     phone: '7094310122',
-    otp: '123456',
     role: 'owner',
     name: 'Raj',
     email: 'raj@rajenterprises.com',
@@ -59,7 +31,6 @@ export const DEV_TEST_ACCOUNTS = {
   },
   BUSINESS_OWNER_RASHIQ: {
     phone: '9042938108',
-    otp: '123456',
     role: 'owner',
     name: 'Rashiq',
     email: 'rashiq@rashiqtrading.com',
@@ -73,7 +44,6 @@ export const DEV_TEST_ACCOUNTS = {
   },
   BUSINESS_OWNER_SURESH: {
     phone: '9876543210',
-    otp: '123456',
     role: 'owner',
     name: 'Suresh Natarajan',
     email: 'suresh@kovaiprecision.com',
@@ -87,7 +57,6 @@ export const DEV_TEST_ACCOUNTS = {
   },
   NORMAL_USER_DHARANI: {
     phone: '9677840181',
-    otp: '123456',
     role: 'user',
     name: 'Dharani',
     email: 'dharani@gmail.com',
@@ -100,7 +69,6 @@ export const DEV_TEST_ACCOUNTS = {
   },
   NORMAL_USER_RAVI: {
     phone: '1234567890',
-    otp: '123456',
     role: 'user',
     name: 'Ravi Kumar',
     email: 'ravi.kumar@example.com',
@@ -300,7 +268,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const [lastSentOtp, setLastSentOtp] = useState('123456');
+  const [lastSentOtp, setLastSentOtp] = useState('');
 
   const sendOtp = async (phone) => {
     setIsLoading(true);
@@ -314,10 +282,10 @@ export function AuthProvider({ children }) {
           error: res?.error?.message || res?.error || "Couldn't send OTP. Please try again."
         };
       }
-      const code = res?.data?.otp_preview || res?.otp_preview || '123456';
-      setLastSentOtp(code || '123456');
+      const code = res?.data?.otp_preview || res?.otp_preview || '';
+      setLastSentOtp(code);
       setIsLoading(false);
-      return { success: true, message: 'OTP sent successfully' };
+      return { success: true, message: 'OTP sent successfully', otp: code };
     } catch (e) {
       setIsLoading(false);
       return { success: false, error: "Couldn't send OTP. Please try again." };
@@ -374,7 +342,6 @@ export function AuthProvider({ children }) {
         isBrandNew = !!(apiRes?.data?.is_new_user || apiRes?.is_new_user);
         matchedAccount = {
           phone,
-          otp: '123456',
           role: 'user',
           name: apiUser?.name || 'CardFlow User',
           city: 'Coimbatore',

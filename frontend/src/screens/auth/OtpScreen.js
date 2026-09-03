@@ -13,7 +13,7 @@ function maskPhone(p) {
 }
 
 export function OtpScreen({ phone, onBackToPhone }) {
-  const { verifyOtp, sendOtp, isLoading } = useAuth();
+  const { verifyOtp, sendOtp, isLoading, lastSentOtp } = useAuth();
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(30);
@@ -116,6 +116,10 @@ export function OtpScreen({ phone, onBackToPhone }) {
         size="lg"
         style={styles.cta}
       />
+
+      {lastSentOtp ? (
+        <Text style={styles.otpPreview}>OTP: {lastSentOtp}</Text>
+      ) : null}
     </ScrollView>
   );
 }
@@ -137,6 +141,14 @@ const styles = StyleSheet.create({
   timer: { textAlign: 'center', fontSize: 13, color: colors.textMuted, marginBottom: spacing.lg },
   resendLink: { color: colors.primary, fontWeight: '600' },
   cta: { marginTop: spacing.sm },
+  otpPreview: {
+    marginTop: spacing.xl,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    letterSpacing: 1
+  },
   successScreen: {
     flex: 1,
     backgroundColor: colors.bgMuted,

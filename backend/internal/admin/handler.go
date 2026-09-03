@@ -140,17 +140,6 @@ func NewAdminHandler(db *database.DB) *AdminHandler {
 				CreatedAt:    now.AddDate(0, -6, 0),
 			},
 			{
-				ID:           "00000000-0000-0000-0000-0000000000a2",
-				Phone:        "+919008722766",
-				Name:         "Govardhan",
-				Role:         "admin",
-				Plan:         "premium",
-				Status:       "active",
-				City:         "Bengaluru",
-				AccessPeriod: "Lifetime Admin Access",
-				CreatedAt:    now.AddDate(0, -6, 0),
-			},
-			{
 				ID:           "00000000-0000-0000-0000-0000000000b3",
 				Phone:        "+917094310122",
 				Name:         "Raj",

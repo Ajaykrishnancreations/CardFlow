@@ -12,13 +12,11 @@ import { useAuth } from '../../context/AuthContext';
 
 const initialUsers = [
   { id: 'usr-ajay', name: 'Ajay', phone: '6382124970', role: 'admin', plan: 'premium', accessPeriod: 'Lifetime Admin Access', city: 'Coimbatore', isIdVerified: true, status: 'active' },
-  { id: 'usr-govardhan', name: 'Govardhan', phone: '9008722766', role: 'admin', plan: 'premium', accessPeriod: 'Lifetime Admin Access', city: 'Bengaluru', isIdVerified: true, status: 'active' },
   { id: 'usr-raj', name: 'Raj', phone: '7094310122', role: 'owner', plan: 'premium', accessPeriod: '1 Year Free Access', businessName: 'Raj Engineering Works', city: 'Coimbatore', isIdVerified: true, status: 'active' },
   { id: 'usr-rashiq', name: 'Rashiq', phone: '9042938108', role: 'owner', plan: 'plus', accessPeriod: '6 Months Free Access', businessName: 'Rashiq Trading & Logistics', city: 'Coimbatore', isIdVerified: true, status: 'active' },
   { id: 'usr-suresh', name: 'Suresh Natarajan', phone: '9876543210', role: 'owner', plan: 'plus', accessPeriod: 'Active Plan', businessName: 'Kovai Precision Tools', city: 'Coimbatore', isIdVerified: true, status: 'active' },
   { id: 'usr-dharani', name: 'Dharani', phone: '9677840181', role: 'user', plan: 'free', accessPeriod: 'Standard User', city: 'Coimbatore', isIdVerified: true, status: 'active' },
-  { id: 'usr-ravi', name: 'Ravi Kumar', phone: '1234567890', role: 'user', plan: 'free', accessPeriod: 'Standard User', city: 'Coimbatore', isIdVerified: true, status: 'active' },
-  { id: 'usr-admin-sup', name: 'Admin Supervisor', phone: '9999988888', role: 'admin', plan: 'premium', accessPeriod: 'Lifetime Admin Access', city: 'Coimbatore', isIdVerified: true, status: 'active' }
+  { id: 'usr-ravi', name: 'Ravi Kumar', phone: '1234567890', role: 'user', plan: 'free', accessPeriod: 'Standard User', city: 'Coimbatore', isIdVerified: true, status: 'active' }
 ];
 
 export function AdminUsersScreen() {

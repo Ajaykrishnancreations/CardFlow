@@ -50,13 +50,8 @@ func (s *AuthService) RequestOTP(ctx context.Context, rawPhone string) (string, 
 
 	var otpCode string
 
-	// 1. For configured test accounts, fixed OTP is 123456
-	if s.isDevTestAccount(phone) {
-		otpCode = "123456"
-	} else {
-		// 2. For any other regular/new user, generate dynamic 6-digit OTP
-		otpCode = s.generate6DigitCode()
-	}
+	// Always generate a fresh 6-digit OTP (no fixed 123456)
+	otpCode = s.generate6DigitCode()
 
 	// Store in memory map for fast and robust verification
 	s.otpMutex.Lock()
@@ -78,7 +73,7 @@ func (s *AuthService) RequestOTP(ctx context.Context, rawPhone string) (string, 
 		_ = s.redis.Client.Expire(ctx, otpKey, 5*time.Minute).Err()
 	}
 
-	slog.Info("🚀 [OTP DISPATCHED]", "phone", phone, "otp", otpCode, "is_test_account", s.isDevTestAccount(phone))
+	slog.Info("🚀 [OTP DISPATCHED]", "phone", phone, "otp", otpCode)
 	return otpCode, nil
 }
 
@@ -109,23 +104,19 @@ func (s *AuthService) VerifyOTP(ctx context.Context, rawPhone, otpCode, deviceID
 
 	isValid := false
 
-	// 1. Test accounts with 123456 (dev/test environment)
-	if !s.cfg.IsProduction() && s.isDevTestAccount(phone) && code == "123456" {
+	// 1. Memory OTP store check (generated OTP for this session)
+	s.otpMutex.RLock()
+	storedCode, exists := s.otpStore[phone]
+	s.otpMutex.RUnlock()
+
+	if exists && storedCode == code {
 		isValid = true
+		s.otpMutex.Lock()
+		delete(s.otpStore, phone)
+		s.otpMutex.Unlock()
 	}
 
-	// 2. Memory OTP store check (for all dynamic OTPs generated during session)
-	if !isValid {
-		s.otpMutex.RLock()
-		storedCode, exists := s.otpStore[phone]
-		s.otpMutex.RUnlock()
-
-		if exists && storedCode == code {
-			isValid = true
-		}
-	}
-
-	// 3. Redis OTP store check
+	// 2. Redis OTP store check
 	if !isValid && s.redis != nil && s.redis.Client != nil {
 		otpKey := fmt.Sprintf("otp:%s", phone)
 		data, err := s.redis.Client.HGetAll(ctx, otpKey).Result()
@@ -137,11 +128,6 @@ func (s *AuthService) VerifyOTP(ctx context.Context, rawPhone, otpCode, deviceID
 				s.redis.Client.Del(ctx, otpKey)
 			}
 		}
-	}
-
-	// 4. Non-production universal fallback
-	if !isValid && !s.cfg.IsProduction() && (code == "123456" || s.cfg.DevMockSMS) {
-		isValid = true
 	}
 
 	if !isValid {
@@ -181,8 +167,6 @@ func GetDeterministicUserID(phone string) uuid.UUID {
 	switch p {
 	case "6382124970":
 		return uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
-	case "9008722766":
-		return uuid.MustParse("00000000-0000-0000-0000-0000000000a2")
 	case "9999988888":
 		return uuid.MustParse("00000000-0000-0000-0000-0000000000a3")
 	case "7094310122":
@@ -243,14 +227,10 @@ func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.Us
 		defaultName := "CardFlow User"
 		p := strings.TrimPrefix(phone, "+91")
 
-		if (p == "6382124970" || p == "9008722766" || p == "9999988888") && !s.cfg.IsProduction() {
+		if p == "6382124970" {
 			defaultRole = domain.RoleAdmin
 			defaultPlan = domain.PlanPremium
-			if p == "6382124970" {
-				defaultName = "Ajay"
-			} else if p == "9008722766" {
-				defaultName = "Govardhan"
-			}
+			defaultName = "Ajay"
 		} else if p == "7094310122" {
 			defaultName = "Raj"
 			defaultPlan = domain.PlanPremium
@@ -298,14 +278,14 @@ func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.Us
 
 func (s *AuthService) isDevTestAccount(phone string) bool {
 	p := strings.TrimPrefix(phone, "+91")
-	return p == "6382124970" || p == "9008722766" || p == "9999988888" ||
+	return p == "6382124970" ||
 		p == "7094310122" || p == "9042938108" || p == "9876543210" ||
 		p == "9677840181" || p == "1234567890"
 }
 
 func (s *AuthService) isBrandNewFallbackNumber(phone string) bool {
 	p := strings.TrimPrefix(phone, "+91")
-	return !(p == "6382124970" || p == "9008722766" || p == "9999988888" ||
+	return !(p == "6382124970" ||
 		p == "7094310122" || p == "9042938108" || p == "9876543210" ||
 		p == "9677840181" || p == "1234567890")
 }
@@ -327,20 +307,11 @@ func (s *AuthService) createFallbackDevUser(phone string) *domain.User {
 	plan := domain.PlanFree
 	name := "CardFlow User"
 
-	// Admin accounts
+	// Only Ajay is admin; everyone else starts as a normal user
 	if p == "6382124970" {
 		role = domain.RoleAdmin
 		plan = domain.PlanPremium
 		name = "Ajay"
-	} else if p == "9008722766" {
-		role = domain.RoleAdmin
-		plan = domain.PlanPremium
-		name = "Govardhan"
-	} else if p == "9999988888" {
-		role = domain.RoleAdmin
-		plan = domain.PlanPremium
-		name = "Admin Supervisor"
-	// Business Owner accounts
 	} else if p == "7094310122" {
 		role = domain.RoleUser
 		plan = domain.PlanPremium
@@ -353,7 +324,6 @@ func (s *AuthService) createFallbackDevUser(phone string) *domain.User {
 		role = domain.RoleUser
 		plan = domain.PlanPlus
 		name = "Suresh Natarajan"
-	// Normal User accounts
 	} else if p == "9677840181" {
 		role = domain.RoleUser
 		plan = domain.PlanFree

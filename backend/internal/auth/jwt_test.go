@@ -47,31 +47,36 @@ func TestJWTGenerationAndValidation(t *testing.T) {
 	}
 }
 
-func TestDevTestAccountGuard(t *testing.T) {
-	cfgDev := &config.Config{
+func TestGeneratedOTPOnly(t *testing.T) {
+	cfg := &config.Config{
 		Env:           "development",
 		JWTPrivateKey: "secret",
+		DevMockSMS:    true,
 	}
-	authSvcDev := NewAuthService(nil, nil, NewJWTService(cfgDev), cfgDev)
+	authSvc := NewAuthService(nil, nil, NewJWTService(cfg), cfg)
 
-	// In DEV, fixed OTP 123456 must succeed
-	pairDev, err := authSvcDev.VerifyOTP(context.Background(), "9876543210", "123456", "device1", "web", "")
+	preview, err := authSvc.RequestOTP(context.Background(), "9876543210")
 	if err != nil {
-		t.Fatalf("Expected dev OTP to succeed in development: %v", err)
+		t.Fatalf("RequestOTP failed: %v", err)
 	}
-	if pairDev.User.Phone != "+919876543210" {
-		t.Errorf("Expected phone +919876543210, got %s", pairDev.User.Phone)
+	if len(preview) != 6 {
+		t.Fatalf("expected 6-digit OTP preview, got %q", preview)
 	}
 
-	// In PRODUCTION, fixed OTP must FAIL (Dev test account guard)
-	cfgProd := &config.Config{
-		Env:           "production",
-		JWTPrivateKey: "secret",
+	// Fixed 123456 must not succeed when it is not the generated code
+	if preview != "123456" {
+		_, errFixed := authSvc.VerifyOTP(context.Background(), "9876543210", "123456", "device1", "web", "")
+		if errFixed == nil {
+			t.Fatal("SECURITY FAILURE: fixed OTP 123456 must not succeed")
+		}
+		// Request again because failed verify does not consume; still same store entry
 	}
-	authSvcProd := NewAuthService(nil, nil, NewJWTService(cfgProd), cfgProd)
-	_, errProd := authSvcProd.VerifyOTP(context.Background(), "9876543210", "123456", "device1", "web", "")
-	if errProd == nil {
-		t.Fatal("SECURITY FAILURE: Fixed dev OTP must NEVER succeed when ENV=production")
+
+	pair, err := authSvc.VerifyOTP(context.Background(), "9876543210", preview, "device1", "web", "")
+	if err != nil {
+		t.Fatalf("Expected generated OTP to succeed: %v", err)
 	}
-	t.Logf("Verified dev OTP was rejected in production: %v", errProd)
+	if pair.User.Phone != "+919876543210" {
+		t.Errorf("Expected phone +919876543210, got %s", pair.User.Phone)
+	}
 }

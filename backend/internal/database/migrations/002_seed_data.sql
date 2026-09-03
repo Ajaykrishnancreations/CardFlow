@@ -46,37 +46,24 @@ VALUES (
     9999
 ) ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, role = 'admin', plan = 'premium';
 
--- ADMIN: Govardhan (+91 90087 22766)
-INSERT INTO users (id, phone, name, email, city, state, country, role, plan, status, free_scans_remaining)
-VALUES (
-    '00000000-0000-0000-0000-0000000000a2',
-    '+919008722766',
-    'Govardhan',
-    'govardhan@cardflow.app',
-    'Bengaluru',
-    'Karnataka',
-    'IN',
-    'admin',
-    'premium',
-    'active',
-    9999
-) ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, role = 'admin', plan = 'premium';
+-- (Removed former admin Govardhan +919008722766 — Ajay is the only admin)
 
--- ADMIN: Admin Supervisor (9999988888)
+-- DEMO USER: Admin Supervisor was removed; only Ajay remains admin.
+-- Seed a normal demo user slot instead of an extra admin.
 INSERT INTO users (id, phone, name, email, city, state, country, role, plan, status, free_scans_remaining)
 VALUES (
     '00000000-0000-0000-0000-000000000003',
     '+919999988888',
-    'Admin Supervisor',
-    'admin@cardflow.app',
+    'Demo Supervisor',
+    'demo@cardflow.app',
     'Coimbatore',
     'Tamil Nadu',
     'IN',
-    'admin',
-    'premium',
+    'user',
+    'free',
     'active',
-    999
-) ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, role = 'admin', plan = 'premium';
+    30
+) ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, role = 'user', plan = 'free';
 
 -- BUSINESS OWNER: Raj (7094310122)
 INSERT INTO users (id, phone, name, email, city, state, country, role, plan, status, free_scans_remaining)

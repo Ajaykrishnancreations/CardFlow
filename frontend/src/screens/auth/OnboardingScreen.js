@@ -32,7 +32,7 @@ export function OnboardingScreen() {
       <TextInput
         value={name}
         onChangeText={(v) => { setName(v); if (error) setError(''); }}
-        placeholder="Ajay Krishnan"
+        placeholder="Enter name"
         placeholderTextColor={colors.textMuted}
         autoFocus
         style={styles.input}
