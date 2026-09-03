@@ -127,77 +127,7 @@ func NewAdminHandler(db *database.DB) *AdminHandler {
 				Services:     []string{"Full Truckload (FTL)", "Warehousing", "Cold Chain Logistics"},
 			},
 		},
-		users: []AdminUserItem{
-			{
-				ID:           "00000000-0000-0000-0000-0000000000a1",
-				Phone:        "+916382124970",
-				Name:         "Ajay",
-				Role:         "admin",
-				Plan:         "premium",
-				Status:       "active",
-				City:         "Coimbatore",
-				AccessPeriod: "Lifetime Admin Access",
-				CreatedAt:    now.AddDate(0, -6, 0),
-			},
-			{
-				ID:           "00000000-0000-0000-0000-0000000000b3",
-				Phone:        "+917094310122",
-				Name:         "Raj",
-				Role:         "owner",
-				Plan:         "premium",
-				Status:       "active",
-				City:         "Coimbatore",
-				AccessPeriod: "1 Year Free Premium",
-				BusinessName: "Raj Engineering Works",
-				CreatedAt:    now.AddDate(0, -3, 0),
-			},
-			{
-				ID:           "00000000-0000-0000-0000-0000000000b4",
-				Phone:        "+919042938108",
-				Name:         "Rashiq",
-				Role:         "owner",
-				Plan:         "plus",
-				Status:       "active",
-				City:         "Coimbatore",
-				AccessPeriod: "6 Months Free Plus",
-				BusinessName: "Rashiq Trading & Logistics",
-				CreatedAt:    now.AddDate(0, -2, 0),
-			},
-			{
-				ID:           "00000000-0000-0000-0000-0000000000u4",
-				Phone:        "+919677840181",
-				Name:         "Dharani",
-				Role:         "user",
-				Plan:         "free",
-				Status:       "active",
-				City:         "Coimbatore",
-				AccessPeriod: "Standard Free User",
-				CreatedAt:    now.AddDate(0, -1, 0),
-			},
-			{
-				ID:           "00000000-0000-0000-0000-0000000000u5",
-				Phone:        "+911234567890",
-				Name:         "Ravi Kumar",
-				Role:         "user",
-				Plan:         "free",
-				Status:       "active",
-				City:         "Coimbatore",
-				AccessPeriod: "Standard Free User",
-				CreatedAt:    now.AddDate(0, -1, 0),
-			},
-			{
-				ID:           "00000000-0000-0000-0000-000000000002",
-				Phone:        "+919876543210",
-				Name:         "Suresh Natarajan",
-				Role:         "owner",
-				Plan:         "plus",
-				Status:       "active",
-				City:         "Coimbatore",
-				AccessPeriod: "Active Subscriber",
-				BusinessName: "Kovai Precision Tools",
-				CreatedAt:    now.AddDate(0, -4, 0),
-			},
-		},
+		users: []AdminUserItem{},
 		verifyQueue: []VerificationItem{
 			{
 				ID:             "kyc-1",
@@ -276,9 +206,39 @@ func (h *AdminHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	if h.db != nil && h.db.Pool != nil {
+		rows, err := h.db.Pool.Query(r.Context(), `
+			SELECT id::text, phone, COALESCE(name, ''), role::text, plan::text, status::text,
+			       COALESCE(city, ''), created_at
+			FROM users
+			WHERE deleted_at IS NULL
+			ORDER BY created_at DESC
+		`)
+		if err == nil {
+			defer rows.Close()
+			users := make([]AdminUserItem, 0)
+			for rows.Next() {
+				var u AdminUserItem
+				if scanErr := rows.Scan(&u.ID, &u.Phone, &u.Name, &u.Role, &u.Plan, &u.Status, &u.City, &u.CreatedAt); scanErr != nil {
+					continue
+				}
+				if u.Role == "admin" {
+					u.AccessPeriod = "Admin Access"
+				} else {
+					u.AccessPeriod = "Standard User"
+				}
+				users = append(users, u)
+			}
+			response.JSON(w, http.StatusOK, map[string]interface{}{
+				"users": users,
+				"count": len(users),
+			})
+			return
+		}
+	}
+
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-
 	response.JSON(w, http.StatusOK, map[string]interface{}{
 		"users": h.users,
 		"count": len(h.users),
@@ -288,6 +248,29 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 	adminUser, _ := r.Context().Value(middleware.UserContextKey).(*domain.User)
 	id := chi.URLParam(r, "id")
+
+	if h.db != nil && h.db.Pool != nil {
+		var phone, name string
+		_ = h.db.Pool.QueryRow(r.Context(), `
+			SELECT phone, COALESCE(name, '') FROM users WHERE id::text = $1 OR phone = $2
+		`, id, id).Scan(&phone, &name)
+
+		_, err := h.db.Pool.Exec(r.Context(), `
+			UPDATE users SET deleted_at = NOW(), status = 'suspended'
+			WHERE (id::text = $1 OR phone = $2)
+			  AND role <> 'admin'
+			  AND deleted_at IS NULL
+		`, id, id)
+		if err == nil {
+			h.logAudit(adminUser.ID, "DELETE_USER", "user", uuid.New(), "deleted", "Admin deleted user: "+name+" "+phone)
+			response.JSON(w, http.StatusOK, map[string]interface{}{
+				"success": true,
+				"message": "User deleted successfully",
+				"id":      id,
+			})
+			return
+		}
+	}
 
 	h.mu.Lock()
 	defer h.mu.Unlock()

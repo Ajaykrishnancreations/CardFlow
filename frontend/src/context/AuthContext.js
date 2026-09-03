@@ -2,85 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { mockBusinesses } from '../data/mockData';
 import { apiClient } from '../services/api';
 
-// Development account metadata (role hints only — OTP is always generated server-side)
-export const DEV_TEST_ACCOUNTS = {
-  ADMIN_AJAY: {
-    phone: '6382124970',
-    role: 'admin',
-    name: 'Ajay',
-    email: 'ajay@cardflow.app',
-    city: 'Coimbatore',
-    state: 'Tamil Nadu',
-    plan: 'premium',
-    freeScansRemaining: 9999,
-    credits: 9999,
-    isIdVerified: true
-  },
-  BUSINESS_OWNER_RAJ: {
-    phone: '7094310122',
-    role: 'owner',
-    name: 'Raj',
-    email: 'raj@rajenterprises.com',
-    city: 'Coimbatore',
-    state: 'Tamil Nadu',
-    plan: 'premium',
-    freeScansRemaining: 500,
-    credits: 200,
-    isIdVerified: true,
-    ownedBusinessIds: ['biz-3']
-  },
-  BUSINESS_OWNER_RASHIQ: {
-    phone: '9042938108',
-    role: 'owner',
-    name: 'Rashiq',
-    email: 'rashiq@rashiqtrading.com',
-    city: 'Coimbatore',
-    state: 'Tamil Nadu',
-    plan: 'plus',
-    freeScansRemaining: 150,
-    credits: 50,
-    isIdVerified: true,
-    ownedBusinessIds: ['biz-4']
-  },
-  BUSINESS_OWNER_SURESH: {
-    phone: '9876543210',
-    role: 'owner',
-    name: 'Suresh Natarajan',
-    email: 'suresh@kovaiprecision.com',
-    city: 'Coimbatore',
-    state: 'Tamil Nadu',
-    plan: 'plus',
-    freeScansRemaining: 100,
-    credits: 50,
-    isIdVerified: true,
-    ownedBusinessIds: ['biz-1', 'biz-2']
-  },
-  NORMAL_USER_DHARANI: {
-    phone: '9677840181',
-    role: 'user',
-    name: 'Dharani',
-    email: 'dharani@gmail.com',
-    city: 'Coimbatore',
-    state: 'Tamil Nadu',
-    plan: 'free',
-    freeScansRemaining: 30,
-    credits: 10,
-    isIdVerified: true
-  },
-  NORMAL_USER_RAVI: {
-    phone: '1234567890',
-    role: 'user',
-    name: 'Ravi Kumar',
-    email: 'ravi.kumar@example.com',
-    city: 'Coimbatore',
-    state: 'Tamil Nadu',
-    plan: 'free',
-    freeScansRemaining: 28,
-    credits: 10,
-    isIdVerified: true
-  }
-};
-
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -306,7 +227,7 @@ export function AuthProvider({ children }) {
         };
       }
 
-      // Match against development test accounts
+      // Build session only from API / database user payload
       let matchedAccount = null;
       let isBrandNew = false;
 
@@ -327,23 +248,12 @@ export function AuthProvider({ children }) {
         isBrandNew = matchedAccount.isNewUser;
       }
 
-      if (!matchedAccount || matchedAccount.name === 'CardFlow User') {
-        for (const key of Object.keys(DEV_TEST_ACCOUNTS)) {
-          const acc = DEV_TEST_ACCOUNTS[key];
-          if (acc.phone === phone || acc.phone === String(phone).replace(/\D/g, '').slice(-10)) {
-            matchedAccount = { ...acc };
-            isBrandNew = false;
-            break;
-          }
-        }
-      }
-
       if (!matchedAccount) {
         isBrandNew = !!(apiRes?.data?.is_new_user || apiRes?.is_new_user);
         matchedAccount = {
           phone,
           role: 'user',
-          name: apiUser?.name || 'CardFlow User',
+          name: 'CardFlow User',
           city: 'Coimbatore',
           state: 'Tamil Nadu',
           plan: 'free',
@@ -387,13 +297,13 @@ export function AuthProvider({ children }) {
   const completeOnboarding = async (profileData) => {
     const updatedUser = {
       ...user,
-      name: profileData.name || 'CardFlow User',
-      role: 'user',
+      name: profileData.name || user?.name || 'CardFlow User',
+      role: user?.role || 'user',
       isNewUser: false
     };
 
     setUser(updatedUser);
-    setRole('user');
+    setRole(updatedUser.role);
     setIsNewUser(false);
 
     try {
