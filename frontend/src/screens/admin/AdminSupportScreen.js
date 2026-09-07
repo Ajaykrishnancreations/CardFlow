@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs
   },
   replyInput: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.sm,
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   statusOptionActive: {
     backgroundColor: colors.primaryLight,

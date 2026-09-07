@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm
   },
   skeletonCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderRadius: radii.md,
     padding: spacing.md,
     borderWidth: 1,
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   loaderBox: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     padding: spacing.xl,
     borderRadius: radii.lg,
     borderWidth: 1,

@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     alignItems: 'center'
   },
   sideChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
@@ -665,7 +665,7 @@ const styles = StyleSheet.create({
   cameraControlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.lg, marginBottom: spacing.sm },
   captureCircleBtn: {
     width: 64, height: 64, borderRadius: 32, borderWidth: 3, borderColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF'
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard
   },
   captureInnerCircle: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary },
   flipBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
   openCameraBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
   uploadFileBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border,
     paddingVertical: 13, borderRadius: radii.lg
   },
   uploadFileBtnText: { color: colors.textPrimary, fontSize: 14, fontWeight: '600' },
@@ -690,10 +690,10 @@ const styles = StyleSheet.create({
     flex: 1, height: 110, objectFit: 'contain', backgroundColor: '#1A1228',
     borderRadius: radii.md, border: `1px solid ${colors.border}`
   },
-  scanningCard: { backgroundColor: '#FFFFFF', borderColor: colors.border, alignItems: 'center', padding: spacing.lg, marginBottom: spacing.sm },
+  scanningCard: { backgroundColor: colors.bgCard, borderColor: colors.border, alignItems: 'center', padding: spacing.lg, marginBottom: spacing.sm },
   scanningTitle: { color: colors.textPrimary, fontSize: 14, fontWeight: '700', marginTop: spacing.sm },
   scanningDesc: { color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginTop: 4 },
-  formCard: { backgroundColor: '#FFFFFF', borderColor: colors.border, padding: spacing.md, borderRadius: radii.lg },
+  formCard: { backgroundColor: colors.bgCard, borderColor: colors.border, padding: spacing.md, borderRadius: radii.lg },
   formHeaderTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, fontFamily: typography.titleSmall.fontFamily },
   formHint: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.md, marginTop: 4 },
   saveBtn: { marginTop: spacing.sm }

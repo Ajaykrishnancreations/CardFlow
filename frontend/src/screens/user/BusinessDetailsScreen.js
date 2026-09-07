@@ -6,10 +6,6 @@ import {
   Navigation,
   Share2,
   Mail,
-  Globe,
-  Clock,
-  MapPin,
-  Building2,
   ShieldCheck,
   Send,
   X,
@@ -17,16 +13,21 @@ import {
   QrCode,
   BookmarkCheck,
   Bookmark,
-  Upload
+  Upload,
+  Palette,
+  Download
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Card } from '../../components/Card';
-import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 import { CardViewToggle } from '../../components/CardViewToggle';
+import { BusinessCardPreview } from '../../components/BusinessCardTemplates';
+import { CardStyleModal } from '../../components/CardStyleModal';
 import { useAuth } from '../../context/AuthContext';
 import { fetchCardOriginalImageUrl } from '../../services/api';
+import { getCardTemplate } from '../../utils/cardTemplateStorage';
+import { downloadCardAs } from '../../utils/cardDownload';
 
 export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBusinessUpdated }) {
   const { user, token, myBusinesses, updateMyBusiness, isBusinessSaved, saveBusinessToVault } = useAuth();
@@ -42,8 +43,29 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
   const [frontUrl, setFrontUrl] = useState(null);
   const [backUrl, setBackUrl] = useState(null);
   const [editForm, setEditForm] = useState(null);
+  const [cardTemplateId, setCardTemplateId] = useState(() => getCardTemplate(business?.id));
+  const [showStyleModal, setShowStyleModal] = useState(false);
+  const [showDownloadOptions, setShowDownloadOptions] = useState(false);
+  const [downloadingFormat, setDownloadingFormat] = useState(null);
   const frontEditRef = React.useRef(null);
   const backEditRef = React.useRef(null);
+  const cardCaptureRef = React.useRef(null);
+
+  useEffect(() => {
+    setCardTemplateId(getCardTemplate(business?.id));
+  }, [business?.id]);
+
+  const handleDownloadCard = async (format) => {
+    setDownloadingFormat(format);
+    try {
+      await downloadCardAs(cardCaptureRef.current, format, (business.name || 'business-card').replace(/\s+/g, '-').toLowerCase());
+    } catch (e) {
+      alert(e.message || 'Could not download card.');
+    } finally {
+      setDownloadingFormat(null);
+      setShowDownloadOptions(false);
+    }
+  };
 
   useEffect(() => {
     let blobs = [];
@@ -162,6 +184,7 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
       setShowEditModal(false);
       if (payload.front_image_data) setFrontUrl(payload.front_image_data);
       if (payload.back_image_data) setBackUrl(payload.back_image_data);
+      setShowStyleModal(true);
     } catch (e) {
       alert(e.message || 'Could not update business');
     } finally {
@@ -234,34 +257,51 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
           </View>
         ) : null}
 
-        <Card style={styles.profileHeaderCard}>
-          {isSaved && (
-            <View style={styles.savedBadgeTop}>
-              <BookmarkCheck size={14} color="#059669" style={{ marginRight: 4 }} />
-              <Text style={styles.savedBadgeText}>SAVED</Text>
+        {viewMode === 'digital' ? (
+          <>
+            <View style={{ position: 'relative' }}>
+              {isSaved && (
+                <View style={styles.savedBadgeFloating}>
+                  <BookmarkCheck size={14} color="#059669" style={{ marginRight: 4 }} />
+                  <Text style={styles.savedBadgeText}>SAVED</Text>
+                </View>
+              )}
+              <BusinessCardPreview ref={cardCaptureRef} business={business} templateId={cardTemplateId} />
             </View>
-          )}
 
-          <View style={styles.logoRow}>
-            <View style={styles.logoBadge}>
-              <Building2 size={28} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.bizName}>{business.name}</Text>
-              <Text style={styles.bizCategory}>
-                {[business.category || business.primary_category, business.city].filter(Boolean).join(' · ')}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, flexWrap: 'wrap', gap: 6 }}>
-                {business.verification === 'gst' ? (
-                  <Badge type="gst" label="GST Verified" />
-                ) : business.gstin ? (
-                  <Badge type="gstPending" label="GST Registered" />
-                ) : null}
-                {business.gstin ? <Text style={styles.gstin}>{business.gstin}</Text> : null}
+            {isOwner ? (
+              <View style={styles.cardStyleActionsRow}>
+                <TouchableOpacity style={styles.cardStyleAction} onPress={() => setShowStyleModal(true)}>
+                  <Palette size={14} color={colors.primary} />
+                  <Text style={styles.cardStyleActionText}>Change Style</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cardStyleAction} onPress={() => setShowDownloadOptions((v) => !v)}>
+                  <Download size={14} color={colors.primary} />
+                  <Text style={styles.cardStyleActionText}>Download Card</Text>
+                </TouchableOpacity>
               </View>
-            </View>
-          </View>
+            ) : null}
 
+            {showDownloadOptions ? (
+              <View style={styles.downloadRow}>
+                {['png', 'jpeg', 'pdf'].map((fmt) => (
+                  <Button
+                    key={fmt}
+                    title={downloadingFormat === fmt ? 'Downloading…' : fmt.toUpperCase()}
+                    variant="outline"
+                    size="sm"
+                    loading={downloadingFormat === fmt}
+                    disabled={!!downloadingFormat}
+                    onPress={() => handleDownloadCard(fmt)}
+                    style={{ flex: 1 }}
+                  />
+                ))}
+              </View>
+            ) : null}
+          </>
+        ) : null}
+
+        <Card style={styles.profileHeaderCard}>
           {/* Action Row */}
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.actionCircleBtn} onPress={() => window.open(`tel:${business.phone}`)}>
@@ -273,8 +313,8 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
 
             {showWhatsApp ? (
             <TouchableOpacity style={styles.actionCircleBtn} onPress={() => window.open(`https://wa.me/${whatsappNumber.replace(/[^0-9+]/g, '')}`)}>
-              <View style={[styles.actionCircle, { backgroundColor: '#ECFDF5' }]}>
-                <MessageSquare size={18} color={colors.verifiedGst} />
+              <View style={[styles.actionCircle, { backgroundColor: colors.primaryLight }]}>
+                <MessageSquare size={18} color={colors.primary} />
               </View>
               <Text style={styles.actionLabel}>WhatsApp</Text>
             </TouchableOpacity>
@@ -285,21 +325,21 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
               onPress={handleSaveToVault}
               disabled={isSaved || isSaving}
             >
-              <View style={[styles.actionCircle, { backgroundColor: isSaved ? '#ECFDF5' : '#F1F5F9' }]}>
+              <View style={[styles.actionCircle, { backgroundColor: colors.primaryLight }]}>
                 {isSaved ? (
-                  <BookmarkCheck size={18} color="#059669" />
+                  <BookmarkCheck size={18} color={colors.primary} />
                 ) : (
                   <Bookmark size={18} color={colors.primary} />
                 )}
               </View>
-              <Text style={[styles.actionLabel, isSaved && { color: '#059669', fontWeight: '700' }]}>
+              <Text style={styles.actionLabel}>
                 {isSaved ? 'Saved' : 'Save'}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionCircleBtn} onPress={() => setShowEnquiryModal(true)}>
-              <View style={[styles.actionCircle, { backgroundColor: '#EFF6FF' }]}>
-                <Mail size={18} color={colors.secondary} />
+              <View style={[styles.actionCircle, { backgroundColor: colors.primaryLight }]}>
+                <Mail size={18} color={colors.primary} />
               </View>
               <Text style={styles.actionLabel}>Enquire</Text>
             </TouchableOpacity>
@@ -308,15 +348,15 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
               style={styles.actionCircleBtn}
               onPress={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(business.address)}`)}
             >
-              <View style={[styles.actionCircle, { backgroundColor: colors.bgMuted }]}>
-                <Navigation size={18} color={colors.textSecondary} />
+              <View style={[styles.actionCircle, { backgroundColor: colors.primaryLight }]}>
+                <Navigation size={18} color={colors.primary} />
               </View>
               <Text style={styles.actionLabel}>Directions</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionCircleBtn} onPress={handleShare}>
-              <View style={[styles.actionCircle, { backgroundColor: '#FEF3C7' }]}>
-                <Share2 size={18} color={colors.warning} />
+              <View style={[styles.actionCircle, { backgroundColor: colors.primaryLight }]}>
+                <Share2 size={18} color={colors.primary} />
               </View>
               <Text style={styles.actionLabel}>Share</Text>
             </TouchableOpacity>
@@ -358,26 +398,6 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
                 <Text style={styles.serviceChipText}>{svc}</Text>
               </View>
             ))}
-          </View>
-        </Card>
-
-        {/* Location & Hours */}
-        <Card style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>Location & Hours</Text>
-
-          <View style={styles.infoRow}>
-            <MapPin size={18} color={colors.primary} style={{ marginRight: spacing.sm, marginTop: 2 }} />
-            <Text style={styles.infoText}>{business.address}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Clock size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm, marginTop: 2 }} />
-            <Text style={styles.infoText}>{business.hours}</Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Globe size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm, marginTop: 2 }} />
-            <Text style={[styles.infoText, { color: colors.primary }]}>{business.website}</Text>
           </View>
         </Card>
 
@@ -510,6 +530,16 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
           </View>
         </Modal>
       ) : null}
+
+      <CardStyleModal
+        visible={showStyleModal}
+        business={business}
+        onClose={() => setShowStyleModal(false)}
+        onSaved={(tpl) => {
+          setCardTemplateId(tpl);
+          setShowStyleModal(false);
+        }}
+      />
     </View>
   );
 }
@@ -551,7 +581,7 @@ const styles = StyleSheet.create({
   },
   originalCardImg: { maxWidth: '100%', maxHeight: 280, objectFit: 'contain', borderRadius: radii.md },
   ownerSection: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderRadius: radii.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
@@ -583,7 +613,7 @@ const styles = StyleSheet.create({
     padding: spacing.md
   },
   editSheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderRadius: radii.modal,
     padding: spacing.lg,
     maxWidth: 520,
@@ -623,7 +653,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     position: 'relative'
   },
-  savedBadgeTop: {
+  savedBadgeFloating: {
     position: 'absolute',
     top: 14,
     right: 14,
@@ -643,42 +673,33 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5
   },
-  logoRow: {
+  cardStyleActionsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
     marginBottom: spacing.md
   },
-  logoBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: radii.lg,
-    backgroundColor: colors.primaryLight,
+  cardStyleAction: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bgCard
   },
-  bizName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.textPrimary
-  },
-  bizCategory: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2
-  },
-  gstin: {
-    fontSize: 12,
-    color: colors.gold,
-    marginLeft: spacing.sm,
-    fontWeight: '600'
+  cardStyleActionText: { fontSize: 12, fontWeight: '700', color: colors.primary },
+  downloadRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md
   },
   actionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md
+    justifyContent: 'space-between'
   },
   actionCircleBtn: {
     alignItems: 'center',
@@ -782,17 +803,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontWeight: '500'
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: spacing.sm
-  },
-  infoText: {
-    fontSize: 13,
-    color: colors.textPrimary,
-    flex: 1,
-    lineHeight: 20
-  },
   trustRow: {
     flexDirection: 'row',
     alignItems: 'center'
@@ -818,7 +828,7 @@ const styles = StyleSheet.create({
     zIndex: 100
   },
   modalSheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,
     padding: spacing.lg,
@@ -867,7 +877,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.sm,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   checkboxChecked: {
     backgroundColor: colors.primary,

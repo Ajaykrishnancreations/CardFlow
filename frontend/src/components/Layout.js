@@ -54,6 +54,6 @@ const styles = StyleSheet.create({
   footerSlot: {
     width: '100%',
     zIndex: 50,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgSurface
   }
 });

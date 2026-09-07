@@ -4,11 +4,13 @@ import { Building2, Plus, Upload, X, ChevronRight } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
+import { CardStyleModal } from '../../components/CardStyleModal';
 import { useAuth } from '../../context/AuthContext';
 
 export function MyBusinessHubScreen({ onSelectBusiness }) {
   const { myBusinesses, addMyBusiness } = useAuth();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [styleBusiness, setStyleBusiness] = useState(null);
   const [form, setForm] = useState({
     business_name: '', category: 'Manufacturing', phone: '', whatsapp: '',
     email: '', website: '', gstin: '', address: '', area: '',
@@ -43,7 +45,7 @@ export function MyBusinessHubScreen({ onSelectBusiness }) {
     }
     setCreating(true);
     try {
-      await addMyBusiness({
+      const created = await addMyBusiness({
         ...form,
         services: form.services ? form.services.split(',').map((s) => s.trim()).filter(Boolean) : []
       });
@@ -51,6 +53,7 @@ export function MyBusinessHubScreen({ onSelectBusiness }) {
       setShowAddModal(false);
       setForm(emptyForm);
       setTimeout(() => setToast(''), 3500);
+      setStyleBusiness(created);
     } catch (e) {
       alert(e.message || 'Could not create business. Check GSTIN is unique and try again.');
     } finally {
@@ -171,6 +174,13 @@ export function MyBusinessHubScreen({ onSelectBusiness }) {
           </View>
         </Modal>
       )}
+
+      <CardStyleModal
+        visible={!!styleBusiness}
+        business={styleBusiness}
+        onClose={() => setStyleBusiness(null)}
+        onSaved={() => setStyleBusiness(null)}
+      />
     </ScrollView>
   );
 }
@@ -205,7 +215,7 @@ const styles = StyleSheet.create({
   },
   addAnotherText: { fontSize: 13, fontWeight: '600', color: colors.primary },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: spacing.md },
-  modalCard: { backgroundColor: '#FFFFFF', borderRadius: radii.modal, padding: spacing.lg, maxWidth: 520, width: '100%', alignSelf: 'center' },
+  modalCard: { backgroundColor: colors.bgCard, borderRadius: radii.modal, padding: spacing.lg, maxWidth: 520, width: '100%', alignSelf: 'center' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   modalTitle: { ...typography.titleMedium, color: colors.textPrimary },
   fieldLabel: { fontSize: 12, fontWeight: '600', color: colors.textPrimary, marginBottom: 4, marginTop: spacing.xs },

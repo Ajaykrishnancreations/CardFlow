@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   qrCard: {
     alignItems: 'center',
     padding: spacing.xxl,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderWidth: 2,
     borderColor: colors.border,
     marginBottom: spacing.lg

@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.input,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     textAlign: 'center',
     fontSize: 20,
     fontWeight: '600',

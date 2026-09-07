@@ -59,7 +59,7 @@ export function AdminDashboardScreen({ onNavigate }) {
       {/* Primary KPI Grid */}
       <View style={styles.kpiGrid}>
         <Card style={styles.kpiCard} onPress={() => onNavigate('admin_users')}>
-          <View style={[styles.kpiIcon, { backgroundColor: '#EFF6FF' }]}>
+          <View style={[styles.kpiIcon, { backgroundColor: colors.primaryLight }]}>
             <Users size={20} color={colors.primary} />
           </View>
           <Text style={styles.kpiValue}>{stats.total_people ?? stats.total_users ?? 0}</Text>
@@ -77,7 +77,7 @@ export function AdminDashboardScreen({ onNavigate }) {
         </Card>
 
         <Card style={styles.kpiCard} onPress={() => onNavigate('admin_kyc')}>
-          <View style={[styles.kpiIcon, { backgroundColor: '#FEF3C7' }]}>
+          <View style={[styles.kpiIcon, { backgroundColor: colors.warningLight }]}>
             <ShieldAlert size={20} color={colors.warning} />
           </View>
           <Text style={styles.kpiValue}>{stats.pending_verifications || 0}</Text>
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   },
   kpiCard: {
     width: 'calc(50% - 6px)',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderColor: colors.border,
     padding: spacing.md,
     cursor: 'pointer'
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   },
   actionCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,

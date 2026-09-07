@@ -85,7 +85,7 @@ export function OwnerDashboardScreen({ onNavigate, onShowQr, onShareCard }) {
         </Card>
 
         <Card style={styles.statCard} onPress={() => onNavigate('owner_enquiries')}>
-          <Inbox size={18} color={colors.secondary} />
+          <Inbox size={18} color={colors.info} />
           <Text style={styles.statNumber}>{activeBiz.enquiriesCount || 14}</Text>
           <Text style={styles.statLabel}>New Leads</Text>
         </Card>
@@ -105,7 +105,7 @@ export function OwnerDashboardScreen({ onNavigate, onShowQr, onShareCard }) {
           activeOpacity={0.8}
           onPress={onShowQr}
         >
-          <View style={[styles.gridIconCircle, { backgroundColor: '#EFF6FF' }]}>
+          <View style={[styles.gridIconCircle, { backgroundColor: colors.primaryLight }]}>
             <QrCode size={22} color={colors.primary} />
           </View>
           <Text style={styles.gridTitle}>QR Code</Text>
@@ -117,7 +117,7 @@ export function OwnerDashboardScreen({ onNavigate, onShowQr, onShareCard }) {
           activeOpacity={0.8}
           onPress={onShareCard}
         >
-          <View style={[styles.gridIconCircle, { backgroundColor: '#FEF3C7' }]}>
+          <View style={[styles.gridIconCircle, { backgroundColor: colors.warningLight }]}>
             <Share2 size={22} color={colors.warning} />
           </View>
           <Text style={styles.gridTitle}>Share Card</Text>
@@ -153,7 +153,7 @@ export function OwnerDashboardScreen({ onNavigate, onShowQr, onShareCard }) {
           activeOpacity={0.8}
           onPress={() => onNavigate?.('user_support')}
         >
-          <View style={[styles.gridIconCircle, { backgroundColor: '#EFF6FF' }]}>
+          <View style={[styles.gridIconCircle, { backgroundColor: colors.primaryLight }]}>
             <LifeBuoy size={22} color={colors.primary} />
           </View>
           <Text style={styles.gridTitle}>Support Service</Text>
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.full,
     borderWidth: 1,
     borderColor: colors.primary,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     marginBottom: 4
   },
   addBizText: {
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   gridItem: {
     width: '48.5%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,

@@ -16,12 +16,14 @@ import {
   MapPin,
   Save,
   Headphones,
-  Home
+  Home,
+  Palette
 } from 'lucide-react';
 import { colors, spacing, radii } from '../../theme';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
+import { ThemeSettings } from '../../components/ThemeSettings';
 import { useAuth } from '../../context/AuthContext';
 
 function formatPhoneDisplay(phone) {
@@ -40,6 +42,7 @@ export function ProfileScreen({ onNavigate, onBack }) {
   const [state, setState] = useState(user?.state || 'Tamil Nadu');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [showTheme, setShowTheme] = useState(false);
 
   useEffect(() => {
     setName(user?.name || '');
@@ -49,6 +52,10 @@ export function ProfileScreen({ onNavigate, onBack }) {
   }, [user]);
 
   const phoneDisplay = formatPhoneDisplay(user?.phone);
+
+  if (showTheme) {
+    return <ThemeSettings onBack={() => setShowTheme(false)} />;
+  }
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -86,6 +93,7 @@ export function ProfileScreen({ onNavigate, onBack }) {
     {
       title: 'Settings',
       items: [
+        { icon: Palette, label: 'Theme', sub: 'Colors & appearance', action: () => setShowTheme(true) },
         { icon: Bell, label: 'Notifications', action: () => alert('Notification settings coming soon.') },
         { icon: Shield, label: 'Privacy', action: () => alert('Privacy settings coming soon.') },
         { icon: FileText, label: 'Terms & Conditions', action: () => alert('Terms & Conditions — CardFlow v1.0') }

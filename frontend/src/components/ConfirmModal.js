@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderRadius: radii.xl,
     padding: spacing.xl,
     alignItems: 'center',
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   cancelBtnText: {
     fontSize: 14,

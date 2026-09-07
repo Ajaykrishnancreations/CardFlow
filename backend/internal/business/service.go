@@ -66,6 +66,76 @@ func (s *BusinessService) businessCoordSelectSQL(ctx context.Context) string {
 	return "ST_Y(b.location::geometry) as lat, ST_X(b.location::geometry) as lng"
 }
 
+func (s *BusinessService) getBusinessServices(ctx context.Context, bizID uuid.UUID) []string {
+	if s.db == nil || s.db.Pool == nil {
+		return nil
+	}
+	rows, err := s.db.Pool.Query(ctx, `SELECT name FROM business_services WHERE business_id = $1 ORDER BY created_at ASC`, bizID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	var services []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err == nil {
+			services = append(services, name)
+		}
+	}
+	return services
+}
+
+// getBusinessPhoneInfo returns the primary phone, the WhatsApp number (if any),
+// and the full list of numbers on file for a business.
+func (s *BusinessService) getBusinessPhoneInfo(ctx context.Context, bizID uuid.UUID) (phone *string, whatsapp *string, phones []string) {
+	if s.db == nil || s.db.Pool == nil {
+		return nil, nil, nil
+	}
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT phone, is_whatsapp FROM business_phones
+		WHERE business_id = $1 ORDER BY created_at ASC
+	`, bizID)
+	if err != nil {
+		return nil, nil, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p string
+		var isWhatsApp bool
+		if err := rows.Scan(&p, &isWhatsApp); err != nil {
+			continue
+		}
+		phones = append(phones, p)
+		if phone == nil {
+			phoneCopy := p
+			phone = &phoneCopy
+		}
+		if isWhatsApp && whatsapp == nil {
+			waCopy := p
+			whatsapp = &waCopy
+		}
+	}
+	return phone, whatsapp, phones
+}
+
+// syncBusinessServices replaces the stored service/product tags for a business.
+func (s *BusinessService) syncBusinessServices(ctx context.Context, bizID uuid.UUID, services []string) {
+	if s.db == nil || s.db.Pool == nil {
+		return
+	}
+	_, _ = s.db.Pool.Exec(ctx, `DELETE FROM business_services WHERE business_id = $1`, bizID)
+	for _, svc := range services {
+		if strings.TrimSpace(svc) == "" {
+			continue
+		}
+		_, _ = s.db.Pool.Exec(ctx, `
+			INSERT INTO business_services (id, business_id, name) VALUES ($1, $2, $3)
+		`, uuid.New(), bizID, svc)
+	}
+}
+
 type CreateBusinessInput struct {
 	Name            string   `json:"name"`
 	Description     string   `json:"description"`
@@ -136,6 +206,7 @@ func (s *BusinessService) GetOwnerBusinesses(ctx context.Context, ownerUserID uu
 	rows, err := s.db.Pool.Query(ctx, `
 		SELECT b.id, b.owner_user_id, b.name, b.slug, COALESCE(b.description, ''), b.primary_category_id,
 		       COALESCE(c.name, ''), b.address_line1, b.city, b.state, b.pincode,
+		       b.website, b.email, b.gstin,
 		       `+s.businessCoordSelectSQL(ctx)+`,
 		       b.status::text, b.verification::text, b.listing::text, b.completeness, b.created_at, b.updated_at
 		FROM businesses b
@@ -152,9 +223,11 @@ func (s *BusinessService) GetOwnerBusinesses(ctx context.Context, ownerUserID uu
 	for rows.Next() {
 		var b domain.Business
 		var catName, status, verif, list string
+		var website, email, gstin *string
 		err := rows.Scan(
 			&b.ID, &b.OwnerUserID, &b.Name, &b.Slug, &b.Description, &b.PrimaryCategoryID,
 			&catName, &b.AddressLine1, &b.City, &b.State, &b.Pincode,
+			&website, &email, &gstin,
 			&b.Latitude, &b.Longitude,
 			&status, &verif, &list, &b.Completeness, &b.CreatedAt, &b.UpdatedAt,
 		)
@@ -163,6 +236,11 @@ func (s *BusinessService) GetOwnerBusinesses(ctx context.Context, ownerUserID uu
 			b.Status = status
 			b.Verification = verif
 			b.Listing = list
+			b.Website = website
+			b.Email = email
+			b.GSTIN = gstin
+			b.Services = s.getBusinessServices(ctx, b.ID)
+			b.Phone, b.WhatsApp, b.Phones = s.getBusinessPhoneInfo(ctx, b.ID)
 			b.CardImageURL = "/api/v1/owner/businesses/" + b.ID.String() + "/card-image?side=front"
 			b.CardBackImageURL = "/api/v1/owner/businesses/" + b.ID.String() + "/card-image?side=back"
 			b.ViewsCount = 120
@@ -301,6 +379,25 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, ownerUserID uuid.U
 		Completeness:      80,
 		Services:          in.Services,
 	}
+	if in.Website != "" {
+		biz.Website = &in.Website
+	}
+	if in.Email != "" {
+		biz.Email = &in.Email
+	}
+	if in.GSTIN != "" {
+		biz.GSTIN = &in.GSTIN
+	}
+	if in.Phone != "" {
+		biz.Phone = &in.Phone
+		biz.Phones = append(biz.Phones, in.Phone)
+	}
+	if in.WhatsApp != "" {
+		biz.WhatsApp = &in.WhatsApp
+		if in.WhatsApp != in.Phone {
+			biz.Phones = append(biz.Phones, in.WhatsApp)
+		}
+	}
 	if in.FrontImageData != "" {
 		biz.CardImageURL = "/api/v1/owner/businesses/" + newID.String() + "/card-image?side=front"
 	}
@@ -434,23 +531,50 @@ func (s *BusinessService) UpdateBusiness(ctx context.Context, ownerUserID, busin
 			}
 		}
 
+		if in.Services != nil {
+			s.syncBusinessServices(ctx, businessID, in.Services)
+		}
+
 		_ = s.persistCardImage(ctx, businessID, "front", in.FrontImageData)
 		_ = s.persistCardImage(ctx, businessID, "back", in.BackImageData)
 	}
 
+	// Re-read the row instead of echoing the input: fields the caller left
+	// blank were kept as-is by the UPDATE's COALESCE, so the input alone
+	// can't tell us the true current value.
 	biz := &domain.Business{
-		ID:           businessID,
-		OwnerUserID:  ownerUserID,
-		Name:         in.Name,
-		Description:  in.Description,
-		AddressLine1: in.AddressLine1,
-		City:         in.City,
-		State:        in.State,
-		Pincode:      in.Pincode,
-		Status:       "live",
-		Verification: "pending",
-		Listing:      "listed",
-		Services:     in.Services,
+		ID:          businessID,
+		OwnerUserID: ownerUserID,
+		Status:      "live",
+	}
+	if s.db != nil && s.db.Pool != nil {
+		var catName, status, verif, list string
+		var website, email, gstin *string
+		err := s.db.Pool.QueryRow(ctx, `
+			SELECT b.name, b.slug, COALESCE(b.description, ''), b.primary_category_id,
+			       COALESCE(c.name, ''), b.address_line1, b.city, b.state, b.pincode,
+			       b.website, b.email, b.gstin,
+			       b.status::text, b.verification::text, b.listing::text, b.completeness
+			FROM businesses b
+			LEFT JOIN categories c ON c.id = b.primary_category_id
+			WHERE b.id = $1
+		`, businessID).Scan(
+			&biz.Name, &biz.Slug, &biz.Description, &biz.PrimaryCategoryID,
+			&catName, &biz.AddressLine1, &biz.City, &biz.State, &biz.Pincode,
+			&website, &email, &gstin,
+			&status, &verif, &list, &biz.Completeness,
+		)
+		if err == nil {
+			biz.PrimaryCategory = catName
+			biz.Status = status
+			biz.Verification = verif
+			biz.Listing = list
+			biz.Website = website
+			biz.Email = email
+			biz.GSTIN = gstin
+		}
+		biz.Services = s.getBusinessServices(ctx, businessID)
+		biz.Phone, biz.WhatsApp, biz.Phones = s.getBusinessPhoneInfo(ctx, businessID)
 	}
 	biz.CardImageURL = "/api/v1/owner/businesses/" + businessID.String() + "/card-image?side=front"
 	biz.CardBackImageURL = "/api/v1/owner/businesses/" + businessID.String() + "/card-image?side=back"

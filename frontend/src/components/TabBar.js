@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
     paddingTop: 8,
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    borderColor: '#FFFFFF'
+    borderColor: colors.bgSurface
   },
   centerLabel: { fontSize: 9, fontWeight: '800', color: colors.primary, marginTop: 4, letterSpacing: 0.5 }
 });

@@ -21,7 +21,7 @@ export function SplashScreen({ onGetStarted, onQuickLogin }) {
       {/* Feature Value Props */}
       <View style={styles.featuresList}>
         <View style={styles.featureItem}>
-          <View style={[styles.featureIconCircle, { backgroundColor: '#EFF6FF' }]}>
+          <View style={[styles.featureIconCircle, { backgroundColor: colors.primaryLight }]}>
             <Search size={20} color={colors.primary} />
           </View>
           <View style={styles.featureTextContainer}>
@@ -45,8 +45,8 @@ export function SplashScreen({ onGetStarted, onQuickLogin }) {
         </View>
 
         <View style={styles.featureItem}>
-          <View style={[styles.featureIconCircle, { backgroundColor: '#EEF2FF' }]}>
-            <ShieldCheck size={20} color={colors.secondary} />
+          <View style={[styles.featureIconCircle, { backgroundColor: colors.infoLight }]}>
+            <ShieldCheck size={20} color={colors.info} />
           </View>
           <View style={styles.featureTextContainer}>
             <Text style={styles.featureTitle}>Multi-Business Digital Cards</Text>
@@ -77,7 +77,7 @@ export function SplashScreen({ onGetStarted, onQuickLogin }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     padding: spacing.xxl,
     justifyContent: 'space-between'
   },

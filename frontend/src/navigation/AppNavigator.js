@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { colors } from '../theme';
 import { Layout } from '../components/Layout';
 import { TabBar } from '../components/TabBar';
 import { AdminTopBar } from '../components/AdminTopBar';
@@ -399,5 +400,5 @@ const styles = StyleSheet.create({
   stack: { flex: 1 },
   tabLayer: { flex: 1 },
   tabLayerHidden: { opacity: 0, position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#FAFAF8', zIndex: 10 }
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.bgMuted, zIndex: 10 }
 });

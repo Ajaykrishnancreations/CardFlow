@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderBottomWidth: 1,
     borderBottomColor: colors.border
   },
@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary
   },
   filterPanel: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginRight: spacing.sm,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   radiusBtnActive: {
     backgroundColor: colors.primaryLight,
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   checkboxChecked: {
     backgroundColor: colors.primary,
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
     fontWeight: '500'
   },
   catChipsWrapper: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: colors.border

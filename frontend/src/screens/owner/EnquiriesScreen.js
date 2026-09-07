@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   tabsRow: {
     flexDirection: 'row',
     padding: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderBottomWidth: 1,
     borderBottomColor: colors.border
   },

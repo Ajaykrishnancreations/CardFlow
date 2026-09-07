@@ -20,7 +20,7 @@ export function AnalyticsScreen() {
       {/* Overview Cards */}
       <View style={styles.metricsGrid}>
         <Card style={styles.metricCard}>
-          <View style={[styles.iconWrap, { backgroundColor: '#EFF6FF' }]}>
+          <View style={[styles.iconWrap, { backgroundColor: colors.primaryLight }]}>
             <Eye size={18} color={colors.primary} />
           </View>
           <Text style={styles.metricValue}>{activeBiz.viewsCount || 284}</Text>
@@ -38,7 +38,7 @@ export function AnalyticsScreen() {
         </Card>
 
         <Card style={styles.metricCard}>
-          <View style={[styles.iconWrap, { backgroundColor: '#FEF3C7' }]}>
+          <View style={[styles.iconWrap, { backgroundColor: colors.warningLight }]}>
             <Phone size={18} color={colors.warning} />
           </View>
           <Text style={styles.metricValue}>36</Text>

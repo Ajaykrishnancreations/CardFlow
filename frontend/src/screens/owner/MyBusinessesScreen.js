@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
   bizCardActive: {
     borderColor: colors.primary,
     borderWidth: 1.5,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   topRow: {
     flexDirection: 'row',

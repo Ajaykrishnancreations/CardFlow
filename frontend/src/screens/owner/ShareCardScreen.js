@@ -74,7 +74,7 @@ export function ShareCardScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.shareOption} activeOpacity={0.8} onPress={handleSms}>
-          <View style={[styles.iconCircle, { backgroundColor: '#EFF6FF' }]}>
+          <View style={[styles.iconCircle, { backgroundColor: colors.primaryLight }]}>
             <Phone size={22} color={colors.primary} />
           </View>
           <View style={{ flex: 1 }}>
@@ -84,8 +84,8 @@ export function ShareCardScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.shareOption} activeOpacity={0.8} onPress={handleEmail}>
-          <View style={[styles.iconCircle, { backgroundColor: '#EEF2FF' }]}>
-            <Mail size={22} color={colors.secondary} />
+          <View style={[styles.iconCircle, { backgroundColor: colors.infoLight }]}>
+            <Mail size={22} color={colors.info} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.optionTitle}>Share via Email</Text>
@@ -94,7 +94,7 @@ export function ShareCardScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.shareOption} activeOpacity={0.8} onPress={handleCopy}>
-          <View style={[styles.iconCircle, { backgroundColor: '#FEF3C7' }]}>
+          <View style={[styles.iconCircle, { backgroundColor: colors.warningLight }]}>
             {copied ? <Check size={22} color={colors.success} /> : <Copy size={22} color={colors.warning} />}
           </View>
           <View style={{ flex: 1 }}>
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   shareOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,

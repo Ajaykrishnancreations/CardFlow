@@ -105,7 +105,9 @@ type Business struct {
 	ViewsCount        int        `json:"views_count,omitempty"`
 	EnquiriesCount    int        `json:"enquiries_count,omitempty"`
 	Services          []string   `json:"services,omitempty"`
+	Phone             *string    `json:"phone,omitempty"`
 	Phones            []string   `json:"phones,omitempty"`
+	WhatsApp          *string    `json:"whatsapp,omitempty"`
 	CardImageURL      string     `json:"card_image_url,omitempty"`
 	CardBackImageURL  string     `json:"card_back_image_url,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`

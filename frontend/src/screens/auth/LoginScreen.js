@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     alignItems: 'center',
     justifyContent: 'center'
   },
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     paddingHorizontal: spacing.lg,
     fontSize: 16,
     color: colors.textPrimary,
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     marginBottom: 4,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   devChipText: { fontSize: 11, color: colors.textSecondary, textAlign: 'center' }
 });

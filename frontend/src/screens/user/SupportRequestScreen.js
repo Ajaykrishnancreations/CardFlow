@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   catText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
   catTextActive: { color: colors.primary },
   input: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     borderRadius: radii.input,
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     borderStyle: 'dashed',
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   attachText: { fontSize: 13, fontWeight: '600', color: colors.primary },
   error: { color: colors.danger, fontSize: 13, marginTop: spacing.sm },

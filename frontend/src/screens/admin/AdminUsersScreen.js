@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
@@ -586,7 +586,7 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 440,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     padding: spacing.lg,
     borderRadius: radii.lg
   },
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1.5,
     borderColor: colors.border,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   durationOptionActive: {
     borderColor: colors.primary,
@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   smallDurationBtnActive: {
     borderColor: colors.primary,

@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.bgCard,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,

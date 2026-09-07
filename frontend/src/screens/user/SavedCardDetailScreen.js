@@ -8,7 +8,9 @@ import {
   Share2,
   UserPlus,
   Image as ImageIcon,
-  Pencil
+  Pencil,
+  ShieldCheck,
+  Building2
 } from 'lucide-react';
 import { colors, radii, spacing } from '../../theme';
 import { Card } from '../../components/Card';
@@ -209,8 +211,6 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
           ]}
         />
 
-        {gstin ? <Text style={styles.gstinBanner}>GSTIN: {gstin}</Text> : null}
-
         {editing ? (
           <Card style={styles.formCard}>
             <Text style={styles.detailsTitle}>Edit Card</Text>
@@ -259,29 +259,50 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
         ) : viewMode === 'digital' ? (
           <Card style={styles.digitalCard}>
             <View style={styles.digitalAccent} />
-            <Text style={styles.digitalName}>{liveCard.person_name || liveCard.personName}</Text>
-            {liveCard.designation ? <Text style={styles.digitalRole}>{liveCard.designation}</Text> : null}
-            <Text style={styles.digitalCompany}>{liveCard.company}</Text>
+            <View style={styles.digitalHeader}>
+              <View style={styles.digitalAvatar}>
+                <Text style={styles.digitalAvatarText}>
+                  {(liveCard.person_name || liveCard.personName || liveCard.company || '?').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.digitalName}>{liveCard.person_name || liveCard.personName}</Text>
+                {liveCard.designation ? <Text style={styles.digitalRole}>{liveCard.designation}</Text> : null}
+              </View>
+              {gstin ? (
+                <View style={styles.digitalGstBadge}>
+                  <ShieldCheck size={12} color={colors.gold} />
+                  <Text style={styles.digitalGstBadgeText}>GST</Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={styles.digitalCompanyRow}>
+              <Building2 size={14} color={colors.primary} />
+              <Text style={styles.digitalCompany}>{liveCard.company}</Text>
+            </View>
+            {gstin ? <Text style={styles.digitalGstLine}>GSTIN: {gstin}</Text> : null}
+
             <View style={styles.digitalDivider} />
+
             {phone ? (
               <View style={styles.digitalRow}>
-                <Phone size={14} color={colors.primary} />
+                <View style={styles.digitalIconChip}><Phone size={14} color={colors.primary} /></View>
                 <Text style={styles.digitalText}>{phone}</Text>
               </View>
             ) : null}
             {email ? (
               <View style={styles.digitalRow}>
-                <Mail size={14} color={colors.primary} />
+                <View style={styles.digitalIconChip}><Mail size={14} color={colors.primary} /></View>
                 <Text style={styles.digitalText}>{email}</Text>
               </View>
             ) : null}
             {address ? (
               <View style={styles.digitalRow}>
-                <MapPin size={14} color={colors.primary} />
+                <View style={styles.digitalIconChip}><MapPin size={14} color={colors.primary} /></View>
                 <Text style={styles.digitalText}>{address}</Text>
               </View>
             ) : null}
-            {gstin ? <Text style={styles.digitalGst}>GST: {gstin}</Text> : null}
           </Card>
         ) : (
           <View style={styles.originalWrap}>
@@ -415,17 +436,46 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgMuted },
   content: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   editHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  gstinBanner: { fontSize: 12, fontWeight: '600', color: colors.gold, marginBottom: spacing.md },
   noImageTitle: { color: '#FFFFFF', fontWeight: '700', fontSize: 14, marginTop: spacing.sm },
-  digitalCard: { padding: spacing.lg, marginBottom: spacing.md, overflow: 'hidden', borderLeftWidth: 4, borderLeftColor: colors.primary },
-  digitalAccent: { position: 'absolute', top: 0, right: 0, width: 80, height: 80, backgroundColor: colors.primaryLight, borderBottomLeftRadius: 80 },
-  digitalName: { fontSize: 20, fontWeight: '800', color: colors.textPrimary },
+  digitalCard: { padding: spacing.lg, marginBottom: spacing.md, overflow: 'hidden', borderTopWidth: 4, borderTopColor: colors.primary },
+  digitalAccent: { position: 'absolute', top: 0, right: 0, width: 96, height: 96, backgroundColor: colors.primaryLight, borderBottomLeftRadius: 96 },
+  digitalHeader: { flexDirection: 'row', alignItems: 'center' },
+  digitalAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md
+  },
+  digitalAvatarText: { fontSize: 18, fontWeight: '700', color: '#FFFFFF' },
+  digitalGstBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.goldLight,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.pill
+  },
+  digitalGstBadgeText: { fontSize: 10, fontWeight: '700', color: colors.gold, letterSpacing: 0.4 },
+  digitalName: { fontSize: 19, fontWeight: '800', color: colors.textPrimary },
   digitalRole: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
-  digitalCompany: { fontSize: 15, fontWeight: '700', color: colors.primary, marginTop: 6 },
+  digitalCompanyRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
+  digitalCompany: { fontSize: 15, fontWeight: '700', color: colors.primary },
+  digitalGstLine: { fontSize: 11, fontWeight: '600', color: colors.textMuted, marginTop: 4 },
   digitalDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  digitalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  digitalRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  digitalIconChip: {
+    width: 30,
+    height: 30,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   digitalText: { fontSize: 13, color: colors.textSecondary, flex: 1 },
-  digitalGst: { fontSize: 12, fontWeight: '700', color: colors.gold, marginTop: spacing.sm },
   originalWrap: {
     backgroundColor: '#0F172A', borderRadius: radii.lg, padding: spacing.md,
     marginBottom: spacing.md, alignItems: 'center', minHeight: 220
@@ -435,12 +485,12 @@ const styles = StyleSheet.create({
   noImageText: { color: '#A8A3B3', marginTop: 4, fontSize: 12, textAlign: 'center' },
   sideToggle: { flexDirection: 'row', gap: 8, marginBottom: spacing.md },
   sideBtn: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: radii.pill, backgroundColor: 'rgba(255,255,255,0.12)' },
-  sideBtnActive: { backgroundColor: '#FFFFFF' },
+  sideBtnActive: { backgroundColor: colors.bgCard },
   sideBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   sideBtnTextActive: { color: colors.primary },
   actionsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   actionBtn: {
-    alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard,
     borderWidth: 1, borderColor: colors.border, borderRadius: radii.md,
     paddingVertical: spacing.sm, paddingHorizontal: spacing.md, minWidth: 72
   },

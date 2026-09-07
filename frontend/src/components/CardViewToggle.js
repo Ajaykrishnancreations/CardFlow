@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm
   },
   itemActive: {
-    backgroundColor: '#FFFFFF'
+    backgroundColor: colors.bgCard
   },
   itemDisabled: {
     opacity: 0.5

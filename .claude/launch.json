@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cardflow-backend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd backend && go run ./cmd/api/"],
+      "port": 8080
+    },
+    {
+      "name": "cardflow-frontend",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd frontend && npm run web -- --port 3001"],
+      "port": 3001
+    }
+  ]
+}
