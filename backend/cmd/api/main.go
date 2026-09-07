@@ -1,5 +1,7 @@
 package main
 
+// build check: dummy sync commit
+
 import (
 	"context"
 	"embed"
