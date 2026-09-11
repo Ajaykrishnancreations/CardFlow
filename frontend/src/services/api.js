@@ -3,6 +3,11 @@
 
 const getBaseUrl = () => {
   if (typeof window !== 'undefined') {
+    // Running inside the native Capacitor shell (Android/iOS) — the bundled
+    // app has no local backend to reach, so always use the live one.
+    if (window.Capacitor?.isNativePlatform?.()) {
+      return 'https://cardflow-api-fsij.onrender.com/api/v1';
+    }
     // When testing on localhost or 127.0.0.1, connect to local backend at 8080
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       return 'http://127.0.0.1:8080/api/v1';
