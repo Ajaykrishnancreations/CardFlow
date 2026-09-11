@@ -152,7 +152,15 @@ function buildColors(primary, secondary, isDark) {
 const savedPrefs = loadThemePrefs();
 const activePrimary = savedPrefs?.primary || DEFAULT_PRIMARY;
 const activeSecondary = activePrimary;
-const activeDarkMode = !!savedPrefs?.darkMode;
+// Once the user picks light/dark explicitly (via the in-app Theme screen)
+// that choice always wins. Until then, follow the system/OS preference —
+// e.g. a phone in system dark mode should open CardFlow in dark mode too,
+// instead of always defaulting to light.
+const systemPrefersDark =
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)').matches
+    : false;
+const activeDarkMode = savedPrefs ? !!savedPrefs.darkMode : systemPrefersDark;
 const isCustomized = activePrimary !== DEFAULT_PRIMARY;
 
 export const activeTheme = {

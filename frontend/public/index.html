@@ -7,13 +7,32 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+  <script>
+    // Resolve light/dark before first paint so the strip behind the status/nav
+    // bars (the safe-area padding below) matches the app's theme instead of
+    // always showing the light default — same "explicit choice wins, else
+    // follow system" rule as src/theme/index.js, read from the same
+    // localStorage key so this always agrees with what the app renders.
+    (function () {
+      try {
+        var raw = window.localStorage.getItem('cf_theme_prefs');
+        var prefs = raw ? JSON.parse(raw) : null;
+        var isDark = prefs && typeof prefs.darkMode === 'boolean'
+          ? prefs.darkMode
+          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.style.setProperty('--cf-bg', isDark ? '#141218' : '#E8E4EA');
+      } catch (e) {
+        document.documentElement.style.setProperty('--cf-bg', '#E8E4EA');
+      }
+    })();
+  </script>
   <style>
     html, body {
       width: 100%;
       height: 100%;
       margin: 0;
       padding: 0;
-      background-color: #E8E4EA;
+      background-color: var(--cf-bg, #E8E4EA);
       font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
       overflow: hidden;
@@ -24,15 +43,18 @@
       margin: 0;
       display: flex;
       flex-direction: column;
-      background-color: #E8E4EA;
+      background-color: var(--cf-bg, #E8E4EA);
       overflow: hidden;
       /* Edge-to-edge native shells (Capacitor) draw content behind the
          status bar and gesture nav bar; keep real content clear of them
-         while the background above still shows through underneath. */
-      padding-top: env(safe-area-inset-top, 0px);
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-      padding-left: env(safe-area-inset-left, 0px);
-      padding-right: env(safe-area-inset-right, 0px);
+         while the background above still shows through underneath.
+         --cf-safe-* is set natively (MainActivity) with the real measured
+         inset in CSS px — more reliable on Android than env() alone, which
+         this falls back to for plain web/iOS. */
+      padding-top: var(--cf-safe-top, env(safe-area-inset-top, 0px));
+      padding-bottom: var(--cf-safe-bottom, env(safe-area-inset-bottom, 0px));
+      padding-left: var(--cf-safe-left, env(safe-area-inset-left, 0px));
+      padding-right: var(--cf-safe-right, env(safe-area-inset-right, 0px));
     }
     * {
       box-sizing: border-box;

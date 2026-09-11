@@ -17,13 +17,16 @@ import {
   Save,
   Headphones,
   Home,
-  Palette
+  Palette,
+  Crown
 } from 'lucide-react';
 import { colors, spacing, radii } from '../../theme';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { ThemeSettings } from '../../components/ThemeSettings';
+import { NotificationSettings } from '../../components/NotificationSettings';
+import { SubscriptionScreen } from '../../components/SubscriptionScreen';
 import { useAuth } from '../../context/AuthContext';
 
 function formatPhoneDisplay(phone) {
@@ -43,6 +46,8 @@ export function ProfileScreen({ onNavigate, onBack }) {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [showTheme, setShowTheme] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showSubscription, setShowSubscription] = useState(false);
 
   useEffect(() => {
     setName(user?.name || '');
@@ -55,6 +60,12 @@ export function ProfileScreen({ onNavigate, onBack }) {
 
   if (showTheme) {
     return <ThemeSettings onBack={() => setShowTheme(false)} />;
+  }
+  if (showNotifications) {
+    return <NotificationSettings onBack={() => setShowNotifications(false)} />;
+  }
+  if (showSubscription) {
+    return <SubscriptionScreen onBack={() => setShowSubscription(false)} />;
   }
 
   const handleSave = async () => {
@@ -87,6 +98,7 @@ export function ProfileScreen({ onNavigate, onBack }) {
         { icon: Building2, label: 'My Businesses', sub: myBusinesses?.length ? `${myBusinesses.length} business${myBusinesses.length > 1 ? 'es' : ''}` : 'None yet', action: () => onNavigate?.('user_my_business') },
         { icon: CreditCard, label: 'Saved Cards', sub: savedCards?.length ? `${savedCards.length} cards` : 'None yet', action: () => onNavigate?.('user_vault') },
         { icon: Download, label: 'Export & Backup', action: () => onNavigate?.('user_vault') },
+        { icon: Crown, label: 'Subscription', sub: 'Go Premium', action: () => setShowSubscription(true) },
         { icon: Headphones, label: 'Support', action: () => onNavigate?.('user_support') }
       ]
     },
@@ -94,7 +106,7 @@ export function ProfileScreen({ onNavigate, onBack }) {
       title: 'Settings',
       items: [
         { icon: Palette, label: 'Theme', sub: 'Colors & appearance', action: () => setShowTheme(true) },
-        { icon: Bell, label: 'Notifications', action: () => alert('Notification settings coming soon.') },
+        { icon: Bell, label: 'Notifications', action: () => setShowNotifications(true) },
         { icon: Shield, label: 'Privacy', action: () => alert('Privacy settings coming soon.') },
         { icon: FileText, label: 'Terms & Conditions', action: () => alert('Terms & Conditions — CardFlow v1.0') }
       ]

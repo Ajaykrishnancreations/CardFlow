@@ -2,5 +2,11 @@
   "appId": "app.cardflow.mobile",
   "appName": "CardFlow",
   "webDir": "dist",
-  "backgroundColor": "#32145F"
+  "backgroundColor": "#32145F",
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_cardflow",
+      "iconColor": "#32145F"
+    }
+  }
 }

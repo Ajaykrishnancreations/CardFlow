@@ -16,6 +16,9 @@ backend/server
 *.dll
 *.so
 *.dylib
+*.apk
+frontend/android/app/build/
+frontend/android/.gradle/
 
 # Allow embedded frontend in backend
 !backend/cmd/api/dist/
