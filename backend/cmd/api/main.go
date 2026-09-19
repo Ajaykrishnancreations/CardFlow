@@ -97,7 +97,7 @@ func main() {
 	businessHandler := business.NewBusinessHandler(businessSvc)
 	cardHandler := card.NewCardHandler(cardSvc, s3Svc)
 	enquiryHandler := enquiry.NewEnquiryHandler(dbPool)
-	billingHandler := billing.NewBillingHandler(dbPool)
+	billingHandler := billing.NewBillingHandler(dbPool, cfg)
 	adminHandler := admin.NewAdminHandler(dbPool)
 	supportHandler := support.NewSupportHandler(dbPool)
 
@@ -163,6 +163,8 @@ func main() {
 		r.Get("/businesses/{id}", discoveryHandler.GetBusiness)
 		r.Get("/businesses/slug/{slug}", discoveryHandler.GetBusinessBySlug)
 		r.Post("/cards/scan", cardHandler.ScanCard)
+		// Razorpay calls this directly (no user JWT) — authenticated by its own signature check.
+		r.Post("/billing/webhook", billingHandler.Webhook)
 
 		// 3. User Account Endpoints (Protected)
 		r.Group(func(r chi.Router) {
@@ -194,7 +196,8 @@ func main() {
 			r.Get("/billing/plans", billingHandler.GetPlans)
 			r.Post("/billing/verify-purchase", billingHandler.VerifyPurchase)
 			r.Get("/billing/credits", billingHandler.GetCredits)
-			r.Post("/billing/activate", billingHandler.ActivatePlan)
+			r.Post("/billing/create-order", billingHandler.CreateOrder)
+			r.Post("/billing/verify-payment", billingHandler.VerifyPayment)
 			r.Post("/billing/cancel", billingHandler.CancelSubscription)
 
 			// Business Owner Endpoints (Multi-Business 1..N)

@@ -1,23 +1,37 @@
 package billing
 
 import (
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
+	"cardflow-backend/internal/config"
 	"cardflow-backend/internal/database"
 	"cardflow-backend/internal/domain"
 	"cardflow-backend/internal/middleware"
 	"cardflow-backend/pkg/response"
 	"github.com/google/uuid"
+	razorpay "github.com/razorpay/razorpay-go"
 )
 
 type BillingHandler struct {
-	db *database.DB
+	db  *database.DB
+	cfg *config.Config
+	rzp *razorpay.Client
 }
 
-func NewBillingHandler(db *database.DB) *BillingHandler {
-	return &BillingHandler{db: db}
+func NewBillingHandler(db *database.DB, cfg *config.Config) *BillingHandler {
+	var rzp *razorpay.Client
+	if cfg.RazorpayKeyID != "" && cfg.RazorpayKeySecret != "" {
+		rzp = razorpay.NewClient(cfg.RazorpayKeyID, cfg.RazorpayKeySecret)
+	}
+	return &BillingHandler{db: db, cfg: cfg, rzp: rzp}
 }
 
 // premiumPlans is the single source of truth for CardFlow Premium's duration
@@ -46,16 +60,21 @@ func (h *BillingHandler) GetPlans(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ActivatePlan is a preview-only subscription activation — no real payment
-// gateway is wired up yet, so this simply records the chosen plan and its
-// expiry against the user directly. It exists so the free/premium gating UI
-// (theme colors, business limit, card templates, saved-card limit) can be
-// exercised end-to-end; swap the body for a real payment-verified call once
-// a gateway is integrated, without changing the DB shape or the gating logic.
-func (h *BillingHandler) ActivatePlan(w http.ResponseWriter, r *http.Request) {
+// CreateOrder starts a real Razorpay payment for the chosen plan. The
+// frontend opens Razorpay Checkout with the returned order_id; nothing is
+// activated until the payment is verified (see VerifyPayment / Webhook).
+func (h *BillingHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
 	if !ok || user == nil {
 		response.Unauthorized(w, "authentication required")
+		return
+	}
+	if h.rzp == nil {
+		response.InternalServerError(w, "payments are not configured on this server yet")
+		return
+	}
+	if h.db == nil || h.db.Pool == nil {
+		response.InternalServerError(w, "database not connected")
 		return
 	}
 
@@ -66,11 +85,210 @@ func (h *BillingHandler) ActivatePlan(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, "invalid request body", nil)
 		return
 	}
-
 	plan, known := premiumPlans[req.PlanID]
 	if !known {
 		response.BadRequest(w, "unknown plan_id — expected one of 3m, 6m, 12m, lifetime", nil)
 		return
+	}
+
+	amountPaise := plan.PriceINR * 100
+	receipt := "sub_" + uuid.New().String()[:12]
+
+	order, err := h.rzp.Order.Create(map[string]interface{}{
+		"amount":   amountPaise,
+		"currency": "INR",
+		"receipt":  receipt,
+		"notes": map[string]interface{}{
+			"user_id": user.ID.String(),
+			"plan_id": req.PlanID,
+		},
+	}, nil)
+	if err != nil {
+		response.InternalServerError(w, "failed to create Razorpay order: "+err.Error())
+		return
+	}
+	orderID, _ := order["id"].(string)
+	if orderID == "" {
+		response.InternalServerError(w, "Razorpay did not return an order id")
+		return
+	}
+
+	_, err = h.db.Pool.Exec(r.Context(), `
+		INSERT INTO subscription_payments (user_id, plan_id, amount_paise, razorpay_order_id, status)
+		VALUES ($1, $2, $3, $4, 'created')
+	`, user.ID, req.PlanID, amountPaise, orderID)
+	if err != nil {
+		response.InternalServerError(w, "failed to record order: "+err.Error())
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"order_id":  orderID,
+		"amount":    amountPaise,
+		"currency":  "INR",
+		"key_id":    h.cfg.RazorpayKeyID,
+		"plan_id":   req.PlanID,
+		"plan_name": plan.Name,
+	})
+}
+
+// VerifyPayment checks Razorpay's checkout signature and, only if valid,
+// activates the subscription. This is the client-side confirmation path;
+// Webhook below is the durable fallback in case the app closes mid-flow.
+func (h *BillingHandler) VerifyPayment(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	if h.db == nil || h.db.Pool == nil {
+		response.InternalServerError(w, "database not connected")
+		return
+	}
+
+	var req struct {
+		RazorpayOrderID   string `json:"razorpay_order_id"`
+		RazorpayPaymentID string `json:"razorpay_payment_id"`
+		RazorpaySignature string `json:"razorpay_signature"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "invalid request body", nil)
+		return
+	}
+	if req.RazorpayOrderID == "" || req.RazorpayPaymentID == "" || req.RazorpaySignature == "" {
+		response.BadRequest(w, "razorpay_order_id, razorpay_payment_id and razorpay_signature are required", nil)
+		return
+	}
+
+	if !validSignature(req.RazorpayOrderID+"|"+req.RazorpayPaymentID, req.RazorpaySignature, h.cfg.RazorpayKeySecret) {
+		response.Error(w, http.StatusBadRequest, "INVALID_SIGNATURE", "payment signature verification failed", nil)
+		return
+	}
+
+	planID, alreadyPaid, err := h.markOrderPaid(r.Context(), user.ID, req.RazorpayOrderID, req.RazorpayPaymentID)
+	if err != nil {
+		response.InternalServerError(w, "failed to record payment: "+err.Error())
+		return
+	}
+
+	// A retried verify call for an order already marked paid must not
+	// re-extend the expiry — just report the subscription's current state.
+	var result map[string]interface{}
+	if alreadyPaid {
+		result, err = h.currentSubscriptionState(r.Context(), user.ID)
+	} else {
+		result, err = h.activateSubscription(r.Context(), user.ID, planID)
+	}
+	if err != nil {
+		response.InternalServerError(w, "payment verified but activation failed: "+err.Error())
+		return
+	}
+	result["already_processed"] = alreadyPaid
+	response.JSON(w, http.StatusOK, result)
+}
+
+// Webhook receives Razorpay's server-to-server payment.captured event —
+// configure this URL + a webhook secret in the Razorpay dashboard
+// (Settings → Webhooks). It activates the same way VerifyPayment does, but
+// idempotently, so a payment still gets applied even if the customer's app
+// closed before the checkout callback ran.
+func (h *BillingHandler) Webhook(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		response.BadRequest(w, "could not read body", nil)
+		return
+	}
+
+	if h.cfg.RazorpayWebhookSecret != "" {
+		sig := r.Header.Get("X-Razorpay-Signature")
+		if !validSignature(string(body), sig, h.cfg.RazorpayWebhookSecret) {
+			response.Error(w, http.StatusBadRequest, "INVALID_SIGNATURE", "webhook signature verification failed", nil)
+			return
+		}
+	}
+
+	var payload struct {
+		Event   string `json:"event"`
+		Payload struct {
+			Payment struct {
+				Entity struct {
+					ID      string `json:"id"`
+					OrderID string `json:"order_id"`
+				} `json:"entity"`
+			} `json:"payment"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		response.BadRequest(w, "invalid webhook payload", nil)
+		return
+	}
+
+	if payload.Event != "payment.captured" {
+		response.JSON(w, http.StatusOK, map[string]interface{}{"ignored": payload.Event})
+		return
+	}
+
+	orderID := payload.Payload.Payment.Entity.OrderID
+	paymentID := payload.Payload.Payment.Entity.ID
+	if orderID == "" || paymentID == "" {
+		response.BadRequest(w, "missing order/payment id in webhook payload", nil)
+		return
+	}
+
+	var userID uuid.UUID
+	err = h.db.Pool.QueryRow(r.Context(), `
+		SELECT user_id FROM subscription_payments WHERE razorpay_order_id = $1
+	`, orderID).Scan(&userID)
+	if err != nil {
+		response.BadRequest(w, "unknown order_id", nil)
+		return
+	}
+
+	planID, alreadyPaid, err := h.markOrderPaid(r.Context(), userID, orderID, paymentID)
+	if err != nil {
+		response.InternalServerError(w, "failed to record payment: "+err.Error())
+		return
+	}
+	// The client-side VerifyPayment call may have already activated this
+	// order — the webhook is a durable fallback, not a second charge.
+	if !alreadyPaid {
+		if _, err := h.activateSubscription(r.Context(), userID, planID); err != nil {
+			response.InternalServerError(w, "webhook activation failed: "+err.Error())
+			return
+		}
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{"status": "processed"})
+}
+
+// markOrderPaid records the payment against the order (idempotent — a
+// second call for an already-paid order is a no-op) and returns the plan id
+// that order was for.
+func (h *BillingHandler) markOrderPaid(ctx context.Context, userID uuid.UUID, orderID, paymentID string) (planID string, alreadyPaid bool, err error) {
+	var status string
+	err = h.db.Pool.QueryRow(ctx, `
+		SELECT plan_id, status FROM subscription_payments
+		WHERE razorpay_order_id = $1 AND user_id = $2
+	`, orderID, userID).Scan(&planID, &status)
+	if err != nil {
+		return "", false, fmt.Errorf("order not found for this user: %w", err)
+	}
+	if status == "paid" {
+		return planID, true, nil
+	}
+
+	_, err = h.db.Pool.Exec(ctx, `
+		UPDATE subscription_payments
+		SET status = 'paid', razorpay_payment_id = $2, paid_at = NOW()
+		WHERE razorpay_order_id = $1
+	`, orderID, paymentID)
+	return planID, false, err
+}
+
+func (h *BillingHandler) activateSubscription(ctx context.Context, userID uuid.UUID, planID string) (map[string]interface{}, error) {
+	plan, known := premiumPlans[planID]
+	if !known {
+		return nil, fmt.Errorf("unknown plan_id %q on paid order", planID)
 	}
 
 	var expiresAt *time.Time
@@ -79,26 +297,59 @@ func (h *BillingHandler) ActivatePlan(w http.ResponseWriter, r *http.Request) {
 		expiresAt = &t
 	}
 
-	if h.db == nil || h.db.Pool == nil {
-		response.InternalServerError(w, "database not connected")
-		return
-	}
-	_, err := h.db.Pool.Exec(r.Context(), `
+	_, err := h.db.Pool.Exec(ctx, `
 		UPDATE users
 		SET is_subscribed = true, subscription_plan_id = $2, subscription_expires_at = $3, updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
-	`, user.ID, req.PlanID, expiresAt)
+	`, userID, planID, expiresAt)
 	if err != nil {
-		response.InternalServerError(w, "failed to activate subscription: "+err.Error())
-		return
+		return nil, err
 	}
 
-	response.JSON(w, http.StatusOK, map[string]interface{}{
+	return map[string]interface{}{
 		"is_subscribed":           true,
-		"subscription_plan_id":    req.PlanID,
+		"subscription_plan_id":    planID,
 		"subscription_plan_name":  plan.Name,
 		"subscription_expires_at": expiresAt,
-	})
+	}, nil
+}
+
+// currentSubscriptionState reads back what's actually stored for the user —
+// used when a payment was already processed, so a retried verify call
+// reports reality instead of re-extending the expiry.
+func (h *BillingHandler) currentSubscriptionState(ctx context.Context, userID uuid.UUID) (map[string]interface{}, error) {
+	var isSubscribed bool
+	var planID *string
+	var expiresAt *time.Time
+	err := h.db.Pool.QueryRow(ctx, `
+		SELECT is_subscribed, subscription_plan_id, subscription_expires_at
+		FROM users WHERE id = $1 AND deleted_at IS NULL
+	`, userID).Scan(&isSubscribed, &planID, &expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	planName := ""
+	if planID != nil {
+		if plan, known := premiumPlans[*planID]; known {
+			planName = plan.Name
+		}
+	}
+	return map[string]interface{}{
+		"is_subscribed":           isSubscribed,
+		"subscription_plan_id":    planID,
+		"subscription_plan_name":  planName,
+		"subscription_expires_at": expiresAt,
+	}, nil
+}
+
+func validSignature(payload, signature, secret string) bool {
+	if secret == "" || signature == "" {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(payload))
+	expected := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(signature))
 }
 
 // CancelSubscription revokes premium access immediately (the plan/expiry
@@ -133,19 +384,19 @@ func (h *BillingHandler) VerifyPurchase(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req struct {
-		Store       string `json:"store"` // 'play' or 'appstore'
-		ProductID   string `json:"product_id"`
+		Store         string `json:"store"` // 'play' or 'appstore'
+		ProductID     string `json:"product_id"`
 		PurchaseToken string `json:"purchase_token"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	// In sandbox / test environment, verify and activate plan
 	response.JSON(w, http.StatusOK, map[string]interface{}{
-		"status":      "activated",
-		"plan":        "plus",
-		"user_id":     user.ID,
+		"status":       "activated",
+		"plan":         "plus",
+		"user_id":      user.ID,
 		"activated_at": time.Now(),
-		"expires_at":  time.Now().AddDate(0, 1, 0),
+		"expires_at":   time.Now().AddDate(0, 1, 0),
 	})
 }
 

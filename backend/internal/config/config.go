@@ -10,10 +10,10 @@ import (
 )
 
 type Config struct {
-	Port         string
-	Env          string
-	APIBaseURL   string
-	PublicWebURL string
+	Port           string
+	Env            string
+	APIBaseURL     string
+	PublicWebURL   string
 	AllowedOrigins []string
 
 	// Database
@@ -36,23 +36,23 @@ type Config struct {
 	RedisDB       int
 
 	// JWT
-	JWTPrivateKey      string
-	JWTPublicKey       string
-	JWTIssuer          string
-	JWTAccessExpiryMin int
+	JWTPrivateKey       string
+	JWTPublicKey        string
+	JWTIssuer           string
+	JWTAccessExpiryMin  int
 	JWTRefreshExpiryDay int
 
 	// Data Encryption (AES-256)
 	DataEncryptionKey string
 
 	// S3 Storage
-	S3Endpoint       string
-	S3Region         string
-	S3PrivateBucket  string
-	S3PublicBucket   string
-	S3UseSSL         bool
-	S3PublicCDNURL   string
-	S3AccessKeyID    string
+	S3Endpoint        string
+	S3Region          string
+	S3PrivateBucket   string
+	S3PublicBucket    string
+	S3UseSSL          bool
+	S3PublicCDNURL    string
+	S3AccessKeyID     string
 	S3SecretAccessKey string
 
 	// Vertex AI / Gemini
@@ -81,6 +81,11 @@ type Config struct {
 	AppleBundleID                string
 	ApplePrivateKey              string
 
+	// Razorpay
+	RazorpayKeyID         string
+	RazorpayKeySecret     string
+	RazorpayWebhookSecret string
+
 	// FCM
 	FCMServerKey string
 
@@ -97,10 +102,10 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		Port:         getEnv("PORT", "8080"),
-		Env:          getEnv("ENV", "development"),
-		APIBaseURL:   getEnv("API_BASE_URL", "http://localhost:8080/api/v1"),
-		PublicWebURL: getEnv("PUBLIC_WEB_URL", "https://cardflow.app"),
+		Port:           getEnv("PORT", "8080"),
+		Env:            getEnv("ENV", "development"),
+		APIBaseURL:     getEnv("API_BASE_URL", "http://localhost:8080/api/v1"),
+		PublicWebURL:   getEnv("PUBLIC_WEB_URL", "https://cardflow.app"),
 		AllowedOrigins: strings.Split(getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://cardflow.app,cardflow://"), ","),
 
 		DatabaseURL:       getEnv("DATABASE_URL", ""),
@@ -120,10 +125,10 @@ func Load() *Config {
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 		RedisDB:       getEnvInt("REDIS_DB", 0),
 
-		JWTPrivateKey:      getEnv("JWT_PRIVATE_KEY", "cardflow-dev-secret-key-ed25519-placeholder-for-dev"),
-		JWTPublicKey:       getEnv("JWT_PUBLIC_KEY", ""),
-		JWTIssuer:          getEnv("JWT_ISSUER", "cardflow.app"),
-		JWTAccessExpiryMin: getEnvInt("JWT_ACCESS_EXPIRY_MINUTES", 15),
+		JWTPrivateKey:       getEnv("JWT_PRIVATE_KEY", "cardflow-dev-secret-key-ed25519-placeholder-for-dev"),
+		JWTPublicKey:        getEnv("JWT_PUBLIC_KEY", ""),
+		JWTIssuer:           getEnv("JWT_ISSUER", "cardflow.app"),
+		JWTAccessExpiryMin:  getEnvInt("JWT_ACCESS_EXPIRY_MINUTES", 15),
 		JWTRefreshExpiryDay: getEnvInt("JWT_REFRESH_EXPIRY_DAYS", 30),
 
 		DataEncryptionKey: getEnv("DATA_ENCRYPTION_KEY", "01234567890123456789012345678901"),
@@ -158,6 +163,10 @@ func Load() *Config {
 		AppleIssuerID:                getEnv("APPLE_ISSUER_ID", ""),
 		AppleBundleID:                getEnv("APPLE_BUNDLE_ID", "com.cardflow.app"),
 		ApplePrivateKey:              getEnv("APPLE_PRIVATE_KEY", ""),
+
+		RazorpayKeyID:         getEnv("RAZORPAY_KEY_ID", ""),
+		RazorpayKeySecret:     getEnv("RAZORPAY_KEY_SECRET", ""),
+		RazorpayWebhookSecret: getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
 
 		FCMServerKey: getEnv("FCM_SERVER_KEY", ""),
 

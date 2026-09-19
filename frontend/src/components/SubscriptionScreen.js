@@ -41,9 +41,11 @@ export function SubscriptionScreen({ onBack }) {
     setWorking(true);
     try {
       await activateSubscription(selectedPlan.id);
-      alert(`${selectedPlan.label} activated. Preview only — payments aren't live yet, so this didn't charge you anything.`);
+      alert(`Payment successful — ${selectedPlan.label} Premium is now active!`);
     } catch (e) {
-      alert(e.message || 'Could not activate plan. Please try again.');
+      if (e.message !== 'Payment cancelled.') {
+        alert(e.message || 'Could not complete payment. Please try again.');
+      }
     } finally {
       setWorking(false);
     }
@@ -127,7 +129,7 @@ export function SubscriptionScreen({ onBack }) {
         size="lg"
         style={{ marginTop: spacing.md }}
       />
-      <Text style={styles.disclaimer}>Preview only — payments aren't live yet.</Text>
+      <Text style={styles.disclaimer}>Secure checkout powered by Razorpay.</Text>
 
       {isPremiumActive ? (
         <TouchableOpacity onPress={handleCancel} style={{ marginTop: spacing.md, alignSelf: 'center' }} disabled={working}>

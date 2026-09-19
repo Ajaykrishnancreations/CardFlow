@@ -355,24 +355,66 @@ export function AuthProvider({ children }) {
     return merged;
   }, [user, token]);
 
-  // Preview-only subscription activation — no payment gateway is wired up yet,
-  // but the resulting is_subscribed/expires_at are real DB state (see
-  // backend billing.ActivatePlan), so gating (theme colors, business/card
-  // limits, premium templates) can be tested end-to-end.
-  const activateSubscription = useCallback(async (planId) => {
-    if (!token) throw new Error('Not signed in');
-    const result = await apiClient.activateSubscription(planId, token);
-    const merged = {
-      ...user,
-      isSubscribed: !!result?.is_subscribed,
-      subscriptionPlanId: result?.subscription_plan_id ?? planId,
-      subscriptionExpiresAt: result?.subscription_expires_at ?? null
-    };
-    setUser(merged);
-    try {
-      localStorage.setItem('cf_user', JSON.stringify(merged));
-    } catch (e) {}
-    return merged;
+  // Opens Razorpay Checkout for the chosen plan and resolves once the
+  // payment is verified server-side and the subscription is activated.
+  // Rejects if the payment fails or the user closes the checkout modal.
+  const activateSubscription = useCallback((planId) => {
+    return new Promise((resolve, reject) => {
+      if (!token) {
+        reject(new Error('Not signed in'));
+        return;
+      }
+      (async () => {
+        try {
+          const order = await apiClient.createBillingOrder(planId, token);
+          if (typeof window === 'undefined' || !window.Razorpay) {
+            reject(new Error('Payment SDK failed to load — check your connection and try again.'));
+            return;
+          }
+          const rzp = new window.Razorpay({
+            key: order.key_id,
+            amount: order.amount,
+            currency: order.currency,
+            name: 'CardFlow',
+            description: `${order.plan_name} Premium`,
+            order_id: order.order_id,
+            prefill: { name: user?.name, contact: user?.phone },
+            theme: { color: '#32145F' },
+            handler: async (rzpResponse) => {
+              try {
+                const result = await apiClient.verifyBillingPayment({
+                  razorpay_order_id: rzpResponse.razorpay_order_id,
+                  razorpay_payment_id: rzpResponse.razorpay_payment_id,
+                  razorpay_signature: rzpResponse.razorpay_signature
+                }, token);
+                const merged = {
+                  ...user,
+                  isSubscribed: !!result?.is_subscribed,
+                  subscriptionPlanId: result?.subscription_plan_id ?? planId,
+                  subscriptionExpiresAt: result?.subscription_expires_at ?? null
+                };
+                setUser(merged);
+                try {
+                  localStorage.setItem('cf_user', JSON.stringify(merged));
+                } catch (e) {}
+                resolve(merged);
+              } catch (e) {
+                reject(e);
+              }
+            },
+            modal: {
+              ondismiss: () => reject(new Error('Payment cancelled.'))
+            }
+          });
+          rzp.on('payment.failed', (resp) => {
+            reject(new Error(resp?.error?.description || 'Payment failed. Please try again.'));
+          });
+          rzp.open();
+        } catch (e) {
+          reject(e);
+        }
+      })();
+    });
   }, [user, token]);
 
   const cancelSubscription = useCallback(async () => {

@@ -140,17 +140,32 @@ export const apiClient = {
     return data.data || data;
   },
 
-  // Preview-only subscription activation — no payment gateway is wired up yet.
-  async activateSubscription(planId, token = '') {
+  // Starts a real Razorpay payment for the given plan — returns the order
+  // details needed to open Razorpay Checkout (see AuthContext.activateSubscription).
+  async createBillingOrder(planId, token = '') {
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(`${API_BASE_URL}/billing/activate`, {
+    const res = await fetch(`${API_BASE_URL}/billing/create-order`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ plan_id: planId })
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data?.error?.message || 'Could not activate plan');
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not start payment');
+    return data.data || data;
+  },
+
+  // Verifies a completed Razorpay Checkout payment and activates the plan.
+  async verifyBillingPayment(payload, token = '') {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/billing/verify-payment`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Payment verification failed');
     return data.data || data;
   },
 
