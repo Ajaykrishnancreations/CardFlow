@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"time"
 
@@ -115,6 +116,113 @@ func (h *BillingHandler) GetTransactions(w http.ResponseWriter, r *http.Request)
 	response.JSON(w, http.StatusOK, map[string]interface{}{"transactions": transactions})
 }
 
+// upgradeQuote describes what a plan switch will actually cost — full price
+// for a free/expired user, or the new plan's price minus a prorated credit
+// for the unused time left on the caller's current plan.
+type upgradeQuote struct {
+	IsUpgrade       bool    `json:"is_upgrade"`
+	CurrentPlanID   string  `json:"current_plan_id,omitempty"`
+	CurrentPlanName string  `json:"current_plan_name,omitempty"`
+	RemainingDays   int     `json:"remaining_days,omitempty"`
+	CreditINR       float64 `json:"credit_inr,omitempty"`
+	NewPlanID       string  `json:"new_plan_id"`
+	NewPlanName     string  `json:"new_plan_name"`
+	FullPriceINR    int     `json:"full_price_inr"`
+	PayableINR      int     `json:"payable_inr"`
+}
+
+// computeUpgradeQuote is the single source of truth for what a plan switch
+// costs — used both to preview the price (GetUpgradeQuote) and to actually
+// charge it (CreateOrder), so the server never trusts a client-supplied
+// amount. New plan duration always runs a full term from today; the credit
+// only discounts the price, matching how the "pay the difference, get a
+// fresh full period" pattern works elsewhere.
+func (h *BillingHandler) computeUpgradeQuote(ctx context.Context, user *domain.User, newPlanID string) (*upgradeQuote, error) {
+	newPlan, known := premiumPlans[newPlanID]
+	if !known {
+		return nil, fmt.Errorf("unknown plan_id %q — expected one of 3m, 6m, 12m, lifetime", newPlanID)
+	}
+
+	quote := &upgradeQuote{
+		NewPlanID:    newPlanID,
+		NewPlanName:  newPlan.Name,
+		FullPriceINR: newPlan.PriceINR,
+		PayableINR:   newPlan.PriceINR,
+	}
+
+	if !user.IsPremiumActive() {
+		return quote, nil
+	}
+	if user.SubscriptionPlanID != nil && *user.SubscriptionPlanID == newPlanID {
+		return nil, fmt.Errorf("you're already on the %s plan", newPlan.Name)
+	}
+	if user.SubscriptionPlanID != nil && *user.SubscriptionPlanID == "lifetime" {
+		return nil, fmt.Errorf("you're already on Lifetime — there's no higher plan to switch to")
+	}
+	if user.SubscriptionExpiresAt == nil {
+		return quote, nil
+	}
+
+	var paidPlanID string
+	var paidAmountPaise int
+	var paidAt time.Time
+	err := h.db.Pool.QueryRow(ctx, `
+		SELECT plan_id, amount_paise, paid_at FROM subscription_payments
+		WHERE user_id = $1 AND status = 'paid' AND paid_at IS NOT NULL
+		ORDER BY paid_at DESC LIMIT 1
+	`, user.ID).Scan(&paidPlanID, &paidAmountPaise, &paidAt)
+	if err != nil {
+		// No payment on record to prorate against — charge full price.
+		return quote, nil
+	}
+
+	totalHours := user.SubscriptionExpiresAt.Sub(paidAt).Hours()
+	remainingHours := time.Until(*user.SubscriptionExpiresAt).Hours()
+	if totalHours <= 0 || remainingHours <= 0 {
+		return quote, nil
+	}
+	fraction := remainingHours / totalHours
+	if fraction > 1 {
+		fraction = 1
+	}
+	creditINR := float64(paidAmountPaise) / 100 * fraction
+
+	payable := int(math.Round(float64(newPlan.PriceINR) - creditINR))
+	if payable < 1 {
+		payable = 1 // Razorpay's minimum chargeable amount
+	}
+
+	currentPlanName := paidPlanID
+	if p, known := premiumPlans[paidPlanID]; known {
+		currentPlanName = p.Name
+	}
+
+	quote.IsUpgrade = true
+	quote.CurrentPlanID = paidPlanID
+	quote.CurrentPlanName = currentPlanName
+	quote.RemainingDays = int(math.Ceil(remainingHours / 24))
+	quote.CreditINR = math.Round(creditINR*100) / 100
+	quote.PayableINR = payable
+	return quote, nil
+}
+
+// GetUpgradeQuote previews the price of switching to plan_id, without
+// charging anything — shown as a confirmation popup before the user pays.
+func (h *BillingHandler) GetUpgradeQuote(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	planID := r.URL.Query().Get("plan_id")
+	quote, err := h.computeUpgradeQuote(r.Context(), user, planID)
+	if err != nil {
+		response.BadRequest(w, err.Error(), nil)
+		return
+	}
+	response.JSON(w, http.StatusOK, quote)
+}
+
 // CreateOrder starts a real Razorpay payment for the chosen plan. The
 // frontend opens Razorpay Checkout with the returned order_id; nothing is
 // activated until the payment is verified (see VerifyPayment / Webhook).
@@ -140,13 +248,14 @@ func (h *BillingHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, "invalid request body", nil)
 		return
 	}
-	plan, known := premiumPlans[req.PlanID]
-	if !known {
-		response.BadRequest(w, "unknown plan_id — expected one of 3m, 6m, 12m, lifetime", nil)
+
+	quote, err := h.computeUpgradeQuote(r.Context(), user, req.PlanID)
+	if err != nil {
+		response.BadRequest(w, err.Error(), nil)
 		return
 	}
 
-	amountPaise := plan.PriceINR * 100
+	amountPaise := quote.PayableINR * 100
 	receipt := "sub_" + uuid.New().String()[:12]
 
 	order, err := h.rzp.Order.Create(map[string]interface{}{
@@ -183,7 +292,7 @@ func (h *BillingHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		"currency":  "INR",
 		"key_id":    h.cfg.RazorpayKeyID,
 		"plan_id":   req.PlanID,
-		"plan_name": plan.Name,
+		"plan_name": quote.NewPlanName,
 	})
 }
 

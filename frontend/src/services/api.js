@@ -187,6 +187,18 @@ export const apiClient = {
     return data.data || data;
   },
 
+  // Previews what switching to planId will cost — full price for a
+  // free/expired user, or a prorated price crediting unused time on the
+  // caller's current plan.
+  async getUpgradeQuote(planId, token = '') {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/billing/upgrade-quote?plan_id=${encodeURIComponent(planId)}`, { headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not calculate upgrade price');
+    return data.data || data;
+  },
+
   // 3. Discovery: Categories
   async getCategories() {
     console.log('📡 [API CALL] GET /categories');

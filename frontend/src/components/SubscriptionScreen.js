@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from 'react-native';
 import { Crown, Check, Receipt, ChevronRight } from 'lucide-react';
 import { colors, spacing, radii, typography } from '../theme';
 import { Card } from './Card';
 import { Button } from './Button';
 import { TransactionHistoryScreen } from './TransactionHistoryScreen';
 import { useAuth } from '../context/AuthContext';
+import { apiClient } from '../services/api';
 
 const PLANS = [
   { id: '3m', label: '3 Months', price: 9 },
@@ -31,10 +32,12 @@ function formatExpiry(iso) {
 }
 
 export function SubscriptionScreen({ onBack }) {
-  const { user, isPremiumActive, activateSubscription, cancelSubscription } = useAuth();
+  const { user, token, isPremiumActive, activateSubscription, cancelSubscription } = useAuth();
   const [selected, setSelected] = useState(user?.subscriptionPlanId || '6m');
   const [working, setWorking] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [quote, setQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const selectedPlan = PLANS.find((p) => p.id === selected) || PLANS[1];
   const activePlan = PLANS.find((p) => p.id === user?.subscriptionPlanId);
   const expiryLabel = formatExpiry(user?.subscriptionExpiresAt);
@@ -43,11 +46,11 @@ export function SubscriptionScreen({ onBack }) {
     return <TransactionHistoryScreen onBack={() => setShowHistory(false)} />;
   }
 
-  const handleChoose = async () => {
+  const proceedToPayment = async (planId, planLabel) => {
     setWorking(true);
     try {
-      await activateSubscription(selectedPlan.id);
-      alert(`Payment successful — ${selectedPlan.label} Premium is now active!`);
+      await activateSubscription(planId);
+      alert(`Payment successful — ${planLabel} Premium is now active!`);
     } catch (e) {
       if (e.message !== 'Payment cancelled.') {
         alert(e.message || 'Could not complete payment. Please try again.');
@@ -55,6 +58,30 @@ export function SubscriptionScreen({ onBack }) {
     } finally {
       setWorking(false);
     }
+  };
+
+  const handleChoose = async () => {
+    const isSwitch = isPremiumActive && selected !== user?.subscriptionPlanId;
+    if (!isSwitch) {
+      await proceedToPayment(selectedPlan.id, selectedPlan.label);
+      return;
+    }
+    setQuoteLoading(true);
+    try {
+      const q = await apiClient.getUpgradeQuote(selected, token);
+      setQuote(q);
+    } catch (e) {
+      alert(e.message || 'Could not calculate upgrade price.');
+    } finally {
+      setQuoteLoading(false);
+    }
+  };
+
+  const handleConfirmSwitch = async () => {
+    const planId = quote.new_plan_id;
+    const planLabel = quote.new_plan_name;
+    setQuote(null);
+    await proceedToPayment(planId, planLabel);
   };
 
   const handleCancel = async () => {
@@ -137,7 +164,7 @@ export function SubscriptionScreen({ onBack }) {
       <Button
         title={`Choose ${selectedPlan.label} — ₹${selectedPlan.price}`}
         onPress={handleChoose}
-        loading={working}
+        loading={working || quoteLoading}
         size="lg"
         style={{ marginTop: spacing.md }}
       />
@@ -147,6 +174,51 @@ export function SubscriptionScreen({ onBack }) {
         <TouchableOpacity onPress={handleCancel} style={{ marginTop: spacing.md, alignSelf: 'center' }} disabled={working}>
           <Text style={styles.cancelLink}>Cancel Subscription</Text>
         </TouchableOpacity>
+      ) : null}
+
+      {quote ? (
+        <Modal transparent animationType="fade" visible={!!quote} onRequestClose={() => setQuote(null)}>
+          <View style={styles.modalOverlay}>
+            <Card style={styles.quoteCard}>
+              <Text style={styles.quoteTitle}>Switch to {quote.new_plan_name}?</Text>
+
+              <View style={styles.quoteRow}>
+                <Text style={styles.quoteLabel}>You already have</Text>
+                <Text style={styles.quoteValue}>{quote.current_plan_name}</Text>
+              </View>
+              <View style={styles.quoteRow}>
+                <Text style={styles.quoteLabel}>Days remaining</Text>
+                <Text style={styles.quoteValue}>{quote.remaining_days} days</Text>
+              </View>
+              <View style={styles.quoteRow}>
+                <Text style={styles.quoteLabel}>Credit for unused time</Text>
+                <Text style={styles.quoteValue}>− ₹{quote.credit_inr}</Text>
+              </View>
+
+              <View style={styles.quoteDivider} />
+
+              <View style={styles.quoteRow}>
+                <Text style={styles.quoteLabel}>{quote.new_plan_name} price</Text>
+                <Text style={styles.quoteValue}>₹{quote.full_price_inr}</Text>
+              </View>
+              <View style={styles.quoteRow}>
+                <Text style={styles.quoteTotalLabel}>You pay now</Text>
+                <Text style={styles.quoteTotalValue}>₹{quote.payable_inr}</Text>
+              </View>
+
+              <Button
+                title={`Pay ₹${quote.payable_inr} & Switch`}
+                onPress={handleConfirmSwitch}
+                loading={working}
+                size="lg"
+                style={{ marginTop: spacing.md }}
+              />
+              <TouchableOpacity onPress={() => setQuote(null)} style={styles.quoteCancelHit} disabled={working}>
+                <Text style={styles.quoteCancelText}>Not now</Text>
+              </TouchableOpacity>
+            </Card>
+          </View>
+        </Modal>
       ) : null}
     </ScrollView>
   );
@@ -228,5 +300,16 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '700', color: colors.gold },
   planPrice: { fontSize: 17, fontWeight: '800', color: colors.textPrimary },
   disclaimer: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
-  cancelLink: { fontSize: 12, fontWeight: '600', color: colors.danger }
+  cancelLink: { fontSize: 12, fontWeight: '600', color: colors.danger },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.65)', justifyContent: 'center', padding: spacing.md },
+  quoteCard: { padding: spacing.lg, maxWidth: 420, width: '100%', alignSelf: 'center' },
+  quoteTitle: { ...typography.titleSmall, color: colors.textPrimary, marginBottom: spacing.md },
+  quoteRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  quoteLabel: { fontSize: 13, color: colors.textSecondary },
+  quoteValue: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
+  quoteDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
+  quoteTotalLabel: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  quoteTotalValue: { fontSize: 18, fontWeight: '800', color: colors.primary },
+  quoteCancelHit: { marginTop: spacing.sm, alignSelf: 'center', padding: 4 },
+  quoteCancelText: { fontSize: 13, fontWeight: '600', color: colors.textMuted }
 });
