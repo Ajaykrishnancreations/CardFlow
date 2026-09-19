@@ -41,18 +41,18 @@ var premiumPlans = map[string]struct {
 	PriceINR int
 	Months   int // 0 means lifetime (never expires)
 }{
-	"3m":       {"3 Months", 199, 3},
-	"6m":       {"6 Months", 399, 6},
-	"12m":      {"12 Months", 599, 12},
-	"lifetime": {"Lifetime", 999, 0},
+	"3m":       {"3 Months", 9, 3},
+	"6m":       {"6 Months", 19, 6},
+	"12m":      {"12 Months", 29, 12},
+	"lifetime": {"Lifetime", 39, 0},
 }
 
 func (h *BillingHandler) GetPlans(w http.ResponseWriter, r *http.Request) {
 	plans := []map[string]interface{}{
-		{"id": "3m", "name": "3 Months", "price_inr": 199, "period": "3_months"},
-		{"id": "6m", "name": "6 Months", "price_inr": 399, "period": "6_months", "badge": "Popular"},
-		{"id": "12m", "name": "12 Months", "price_inr": 599, "period": "12_months", "badge": "Best Value"},
-		{"id": "lifetime", "name": "Lifetime", "price_inr": 999, "period": "lifetime", "badge": "One-time"},
+		{"id": "3m", "name": "3 Months", "price_inr": 9, "period": "3_months"},
+		{"id": "6m", "name": "6 Months", "price_inr": 19, "period": "6_months", "badge": "Popular"},
+		{"id": "12m", "name": "12 Months", "price_inr": 29, "period": "12_months", "badge": "Best Value"},
+		{"id": "lifetime", "name": "Lifetime", "price_inr": 39, "period": "lifetime", "badge": "One-time"},
 	}
 
 	response.JSON(w, http.StatusOK, map[string]interface{}{

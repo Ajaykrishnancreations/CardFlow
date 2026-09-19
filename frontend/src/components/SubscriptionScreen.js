@@ -7,10 +7,10 @@ import { Button } from './Button';
 import { useAuth } from '../context/AuthContext';
 
 const PLANS = [
-  { id: '3m', label: '3 Months', price: 199 },
-  { id: '6m', label: '6 Months', price: 399, badge: 'Popular' },
-  { id: '12m', label: '12 Months', price: 599, badge: 'Best Value' },
-  { id: 'lifetime', label: 'Lifetime', price: 999, badge: 'One-time' }
+  { id: '3m', label: '3 Months', price: 9 },
+  { id: '6m', label: '6 Months', price: 19, badge: 'Popular' },
+  { id: '12m', label: '12 Months', price: 29, badge: 'Best Value' },
+  { id: 'lifetime', label: 'Lifetime', price: 39, badge: 'One-time' }
 ];
 
 const PERKS = [
