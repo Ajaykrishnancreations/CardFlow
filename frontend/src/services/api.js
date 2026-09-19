@@ -178,6 +178,15 @@ export const apiClient = {
     return data.data || data;
   },
 
+  async getBillingTransactions(token = '') {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/billing/transactions`, { headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not load transactions');
+    return data.data || data;
+  },
+
   // 3. Discovery: Categories
   async getCategories() {
     console.log('📡 [API CALL] GET /categories');

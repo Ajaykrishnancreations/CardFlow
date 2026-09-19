@@ -199,6 +199,7 @@ func main() {
 			r.Post("/billing/create-order", billingHandler.CreateOrder)
 			r.Post("/billing/verify-payment", billingHandler.VerifyPayment)
 			r.Post("/billing/cancel", billingHandler.CancelSubscription)
+			r.Get("/billing/transactions", billingHandler.GetTransactions)
 
 			// Business Owner Endpoints (Multi-Business 1..N)
 			r.Route("/owner", func(r chi.Router) {

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Crown, Check } from 'lucide-react';
+import { Crown, Check, Receipt, ChevronRight } from 'lucide-react';
 import { colors, spacing, radii, typography } from '../theme';
 import { Card } from './Card';
 import { Button } from './Button';
+import { TransactionHistoryScreen } from './TransactionHistoryScreen';
 import { useAuth } from '../context/AuthContext';
 
 const PLANS = [
@@ -33,9 +34,14 @@ export function SubscriptionScreen({ onBack }) {
   const { user, isPremiumActive, activateSubscription, cancelSubscription } = useAuth();
   const [selected, setSelected] = useState(user?.subscriptionPlanId || '6m');
   const [working, setWorking] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const selectedPlan = PLANS.find((p) => p.id === selected) || PLANS[1];
   const activePlan = PLANS.find((p) => p.id === user?.subscriptionPlanId);
   const expiryLabel = formatExpiry(user?.subscriptionExpiresAt);
+
+  if (showHistory) {
+    return <TransactionHistoryScreen onBack={() => setShowHistory(false)} />;
+  }
 
   const handleChoose = async () => {
     setWorking(true);
@@ -76,6 +82,12 @@ export function SubscriptionScreen({ onBack }) {
       </View>
       <Text style={styles.pageTitle}>CardFlow Premium</Text>
       <Text style={styles.pageSub}>Unlock premium features and grow your business faster.</Text>
+
+      <TouchableOpacity style={styles.historyRow} activeOpacity={0.75} onPress={() => setShowHistory(true)}>
+        <Receipt size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
+        <Text style={styles.historyText}>Transaction History</Text>
+        <ChevronRight size={16} color={colors.textMuted} />
+      </TouchableOpacity>
 
       {isPremiumActive ? (
         <Card style={styles.statusCard}>
@@ -155,7 +167,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md
   },
   pageTitle: { fontSize: 24, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
-  pageSub: { ...typography.bodyMedium, marginBottom: spacing.lg },
+  pageSub: { ...typography.bodyMedium, marginBottom: spacing.md },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md
+  },
+  historyText: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.textPrimary },
   statusCard: {
     padding: spacing.md,
     marginBottom: spacing.lg,

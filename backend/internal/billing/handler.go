@@ -60,6 +60,61 @@ func (h *BillingHandler) GetPlans(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetTransactions lists the caller's own subscription payment history —
+// shown on the CardFlow Premium screen so a user can see every attempt
+// (paid, pending, failed) without needing access to the Razorpay dashboard.
+func (h *BillingHandler) GetTransactions(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	if h.db == nil || h.db.Pool == nil {
+		response.InternalServerError(w, "database not connected")
+		return
+	}
+
+	rows, err := h.db.Pool.Query(r.Context(), `
+		SELECT plan_id, amount_paise, razorpay_order_id, COALESCE(razorpay_payment_id, ''), status, created_at, paid_at
+		FROM subscription_payments
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+	`, user.ID)
+	if err != nil {
+		response.InternalServerError(w, "failed to load transactions: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	transactions := []map[string]interface{}{}
+	for rows.Next() {
+		var planID, orderID, paymentID, status string
+		var amountPaise int
+		var createdAt time.Time
+		var paidAt *time.Time
+		if err := rows.Scan(&planID, &amountPaise, &orderID, &paymentID, &status, &createdAt, &paidAt); err != nil {
+			response.InternalServerError(w, "failed to read transaction: "+err.Error())
+			return
+		}
+		planName := planID
+		if plan, known := premiumPlans[planID]; known {
+			planName = plan.Name
+		}
+		transactions = append(transactions, map[string]interface{}{
+			"plan_id":             planID,
+			"plan_name":           planName,
+			"amount_inr":          amountPaise / 100,
+			"razorpay_order_id":   orderID,
+			"razorpay_payment_id": paymentID,
+			"status":              status,
+			"created_at":          createdAt,
+			"paid_at":             paidAt,
+		})
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{"transactions": transactions})
+}
+
 // CreateOrder starts a real Razorpay payment for the chosen plan. The
 // frontend opens Razorpay Checkout with the returned order_id; nothing is
 // activated until the payment is verified (see VerifyPayment / Webhook).
