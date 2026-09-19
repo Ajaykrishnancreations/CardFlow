@@ -153,12 +153,14 @@ func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.Us
 	var roleStr, planStr string
 	err := s.db.Pool.QueryRow(ctx, `
 		SELECT id, phone, COALESCE(name, ''), email, photo_url, COALESCE(city, ''), COALESCE(state, ''), country,
-		       role::text, plan::text, free_scans_remaining, free_scans_reset_at, status::text, created_at, updated_at
+		       role::text, plan::text, free_scans_remaining, free_scans_reset_at, status::text, created_at, updated_at,
+		       is_subscribed, subscription_plan_id, subscription_expires_at
 		FROM users
 		WHERE phone = $1 AND deleted_at IS NULL
 	`, phone).Scan(
 		&u.ID, &u.Phone, &u.Name, &u.Email, &u.PhotoURL, &u.City, &u.State, &u.Country,
 		&roleStr, &planStr, &u.FreeScansRemaining, &u.FreeScansResetAt, &u.Status, &u.CreatedAt, &u.UpdatedAt,
+		&u.IsSubscribed, &u.SubscriptionPlanID, &u.SubscriptionExpiresAt,
 	)
 
 	if err == nil {
@@ -190,12 +192,14 @@ func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.Us
 
 	err = s.db.Pool.QueryRow(ctx, `
 		SELECT id, phone, COALESCE(name, ''), email, photo_url, COALESCE(city, ''), COALESCE(state, ''), country,
-		       role::text, plan::text, free_scans_remaining, free_scans_reset_at, status::text, created_at, updated_at
+		       role::text, plan::text, free_scans_remaining, free_scans_reset_at, status::text, created_at, updated_at,
+		       is_subscribed, subscription_plan_id, subscription_expires_at
 		FROM users
 		WHERE phone = $1 AND deleted_at IS NULL
 	`, phone).Scan(
 		&u.ID, &u.Phone, &u.Name, &u.Email, &u.PhotoURL, &u.City, &u.State, &u.Country,
 		&roleStr, &planStr, &u.FreeScansRemaining, &u.FreeScansResetAt, &u.Status, &u.CreatedAt, &u.UpdatedAt,
+		&u.IsSubscribed, &u.SubscriptionPlanID, &u.SubscriptionExpiresAt,
 	)
 	if err != nil {
 		return nil, false, err

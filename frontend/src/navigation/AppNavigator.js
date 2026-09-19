@@ -18,6 +18,7 @@ import { SavedCardsScreen } from '../screens/user/SavedCardsScreen';
 import { SavedCardDetailScreen } from '../screens/user/SavedCardDetailScreen';
 import { ScanCardScreen } from '../screens/user/ScanCardScreen';
 import { ProfileScreen } from '../screens/user/ProfileScreen';
+import { SubscriptionScreen } from '../components/SubscriptionScreen';
 import { MyBusinessHubScreen } from '../screens/user/MyBusinessHubScreen';
 import { SupportHubScreen } from '../screens/user/SupportHubScreen';
 import { SupportRequestScreen } from '../screens/user/SupportRequestScreen';
@@ -94,7 +95,7 @@ function AuthFlow({ authStep, setAuthStep, currentPhone, setCurrentPhone }) {
  * - Profile is a secondary screen reached from Home (not a bottom tab)
  */
 export function AppNavigator() {
-  const { isAuthenticated, role, isNewUser } = useAuth();
+  const { isAuthenticated, role, isNewUser, subscriptionOverlayOpen, closeSubscription } = useAuth();
 
   const [authStep, setAuthStep] = useState('splash');
   const [currentTab, setCurrentTab] = useState(null);
@@ -380,19 +381,27 @@ export function AppNavigator() {
         : currentTab;
 
   return (
-    <Layout
-      header={role === 'admin' ? <AdminTopBar /> : null}
-      footer={
-        hideTabBar ? null : (
-          <TabBar
-            currentTab={tabBarCurrent}
-            onSelectTab={selectTab}
-          />
-        )
-      }
-    >
-      {renderStack()}
-    </Layout>
+    <>
+      <Layout
+        header={role === 'admin' ? <AdminTopBar /> : null}
+        footer={
+          hideTabBar ? null : (
+            <TabBar
+              currentTab={tabBarCurrent}
+              onSelectTab={selectTab}
+            />
+          )
+        }
+      >
+        {renderStack()}
+      </Layout>
+
+      {subscriptionOverlayOpen ? (
+        <View style={styles.paywallOverlay}>
+          <SubscriptionScreen onBack={closeSubscription} />
+        </View>
+      ) : null}
+    </>
   );
 }
 
@@ -400,5 +409,6 @@ const styles = StyleSheet.create({
   stack: { flex: 1 },
   tabLayer: { flex: 1 },
   tabLayerHidden: { opacity: 0, position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.bgMuted, zIndex: 10 }
+  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.bgMuted, zIndex: 10 },
+  paywallOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.bgMuted, zIndex: 50 }
 });

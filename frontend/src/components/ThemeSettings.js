@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Check, Moon, Sun, Palette, RotateCcw } from 'lucide-react';
+import { Check, Moon, Sun, Palette, RotateCcw, Lock } from 'lucide-react';
 import { colors, spacing, radii, typography, activeTheme } from '../theme';
 import { THEME_PALETTE, DEFAULT_PRIMARY } from '../theme/palette';
 import { saveThemePrefs, clearThemePrefs } from '../theme/themeStorage';
 import { Card } from './Card';
 import { Button } from './Button';
+import { UpgradeModal } from './UpgradeModal';
+import { useAuth } from '../context/AuthContext';
 
-function Swatch({ swatch, selected, isDefault, onPress }) {
+function Swatch({ swatch, selected, isDefault, locked, onPress }) {
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -16,7 +18,13 @@ function Swatch({ swatch, selected, isDefault, onPress }) {
       accessibilityLabel={swatch.name}
     >
       <View style={[styles.swatch, { backgroundColor: swatch.value }, selected && styles.swatchSelected]}>
-        {selected ? <Check size={16} color="#FFFFFF" strokeWidth={3} /> : null}
+        {locked ? (
+          <View style={styles.lockBadge}>
+            <Lock size={11} color="#FFFFFF" strokeWidth={2.5} />
+          </View>
+        ) : selected ? (
+          <Check size={16} color="#FFFFFF" strokeWidth={3} />
+        ) : null}
       </View>
       <Text style={styles.swatchLabel} numberOfLines={1}>{swatch.name}{isDefault ? ' · Default' : ''}</Text>
     </TouchableOpacity>
@@ -24,10 +32,20 @@ function Swatch({ swatch, selected, isDefault, onPress }) {
 }
 
 export function ThemeSettings({ onBack }) {
+  const { isPremiumActive } = useAuth();
   const [primary, setPrimary] = useState(activeTheme.primary);
   const [darkMode, setDarkMode] = useState(activeTheme.darkMode);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   const isPending = primary !== activeTheme.primary || darkMode !== activeTheme.darkMode;
+
+  const handlePickColor = (swatch) => {
+    if (swatch.premium && !isPremiumActive) {
+      setShowUpgrade(true);
+      return;
+    }
+    setPrimary(swatch.value);
+  };
 
   const handleApply = () => {
     saveThemePrefs({ primary, darkMode });
@@ -58,7 +76,8 @@ export function ThemeSettings({ onBack }) {
               swatch={swatch}
               selected={primary === swatch.value}
               isDefault={swatch.value === DEFAULT_PRIMARY}
-              onPress={() => setPrimary(swatch.value)}
+              locked={!!swatch.premium && !isPremiumActive}
+              onPress={() => handlePickColor(swatch)}
             />
           ))}
         </View>
@@ -104,6 +123,13 @@ export function ThemeSettings({ onBack }) {
         size="lg"
         style={{ marginTop: spacing.sm }}
       />
+
+      <UpgradeModal
+        visible={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        title="Unlock every accent color"
+        message="Royal Purple and Indigo are free. Upgrade to CardFlow Premium to use all 10 accent colors."
+      />
     </ScrollView>
   );
 }
@@ -138,6 +164,14 @@ const styles = StyleSheet.create({
   },
   swatchSelected: { borderColor: colors.textPrimary },
   swatchLabel: { fontSize: 10, color: colors.textMuted, marginTop: 6, textAlign: 'center' },
+  lockBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   modeCard: { padding: 0, overflow: 'hidden', marginBottom: spacing.md },
   modeRow: {
     flexDirection: 'row',

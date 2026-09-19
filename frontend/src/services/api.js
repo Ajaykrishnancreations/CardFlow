@@ -140,6 +140,29 @@ export const apiClient = {
     return data.data || data;
   },
 
+  // Preview-only subscription activation — no payment gateway is wired up yet.
+  async activateSubscription(planId, token = '') {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/billing/activate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ plan_id: planId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not activate plan');
+    return data.data || data;
+  },
+
+  async cancelSubscription(token = '') {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/billing/cancel`, { method: 'POST', headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not cancel subscription');
+    return data.data || data;
+  },
+
   // 3. Discovery: Categories
   async getCategories() {
     console.log('📡 [API CALL] GET /categories');

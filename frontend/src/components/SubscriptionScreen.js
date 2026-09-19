@@ -4,6 +4,7 @@ import { Crown, Check } from 'lucide-react';
 import { colors, spacing, radii, typography } from '../theme';
 import { Card } from './Card';
 import { Button } from './Button';
+import { useAuth } from '../context/AuthContext';
 
 const PLANS = [
   { id: '3m', label: '3 Months', price: 199 },
@@ -19,12 +20,45 @@ const PERKS = [
   'Remove CardFlow watermark'
 ];
 
-export function SubscriptionScreen({ onBack }) {
-  const [selected, setSelected] = useState('6m');
-  const selectedPlan = PLANS.find((p) => p.id === selected);
+function formatExpiry(iso) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch (e) {
+    return null;
+  }
+}
 
-  const handleChoose = () => {
-    alert(`${selectedPlan.label} plan selected. Payments aren't live yet — we'll notify you when Premium launches!`);
+export function SubscriptionScreen({ onBack }) {
+  const { user, isPremiumActive, activateSubscription, cancelSubscription } = useAuth();
+  const [selected, setSelected] = useState(user?.subscriptionPlanId || '6m');
+  const [working, setWorking] = useState(false);
+  const selectedPlan = PLANS.find((p) => p.id === selected) || PLANS[1];
+  const activePlan = PLANS.find((p) => p.id === user?.subscriptionPlanId);
+  const expiryLabel = formatExpiry(user?.subscriptionExpiresAt);
+
+  const handleChoose = async () => {
+    setWorking(true);
+    try {
+      await activateSubscription(selectedPlan.id);
+      alert(`${selectedPlan.label} activated. Preview only — payments aren't live yet, so this didn't charge you anything.`);
+    } catch (e) {
+      alert(e.message || 'Could not activate plan. Please try again.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    setWorking(true);
+    try {
+      await cancelSubscription();
+      alert('Subscription cancelled — you are back on the Free plan.');
+    } catch (e) {
+      alert(e.message || 'Could not cancel subscription.');
+    } finally {
+      setWorking(false);
+    }
   };
 
   return (
@@ -40,6 +74,17 @@ export function SubscriptionScreen({ onBack }) {
       </View>
       <Text style={styles.pageTitle}>CardFlow Premium</Text>
       <Text style={styles.pageSub}>Unlock premium features and grow your business faster.</Text>
+
+      {isPremiumActive ? (
+        <Card style={styles.statusCard}>
+          <Text style={styles.statusTitle}>
+            You're on {activePlan?.label || 'Premium'}
+          </Text>
+          <Text style={styles.statusSub}>
+            {expiryLabel ? `Active until ${expiryLabel}` : 'Lifetime — never expires'}
+          </Text>
+        </Card>
+      ) : null}
 
       <Card style={styles.perksCard}>
         {PERKS.map((perk) => (
@@ -75,8 +120,20 @@ export function SubscriptionScreen({ onBack }) {
         );
       })}
 
-      <Button title={`Choose ${selectedPlan.label} — ₹${selectedPlan.price}`} onPress={handleChoose} size="lg" style={{ marginTop: spacing.md }} />
+      <Button
+        title={`Choose ${selectedPlan.label} — ₹${selectedPlan.price}`}
+        onPress={handleChoose}
+        loading={working}
+        size="lg"
+        style={{ marginTop: spacing.md }}
+      />
       <Text style={styles.disclaimer}>Preview only — payments aren't live yet.</Text>
+
+      {isPremiumActive ? (
+        <TouchableOpacity onPress={handleCancel} style={{ marginTop: spacing.md, alignSelf: 'center' }} disabled={working}>
+          <Text style={styles.cancelLink}>Cancel Subscription</Text>
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
   );
 }
@@ -97,6 +154,15 @@ const styles = StyleSheet.create({
   },
   pageTitle: { fontSize: 24, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
   pageSub: { ...typography.bodyMedium, marginBottom: spacing.lg },
+  statusCard: {
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    backgroundColor: colors.goldLight,
+    borderWidth: 1,
+    borderColor: colors.gold
+  },
+  statusTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  statusSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   perksCard: { padding: spacing.lg, marginBottom: spacing.lg },
   perkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   perkText: { fontSize: 13, color: colors.textPrimary, flex: 1 },
@@ -140,5 +206,6 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: 10, fontWeight: '700', color: colors.gold },
   planPrice: { fontSize: 17, fontWeight: '800', color: colors.textPrimary },
-  disclaimer: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm }
+  disclaimer: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
+  cancelLink: { fontSize: 12, fontWeight: '600', color: colors.danger }
 });

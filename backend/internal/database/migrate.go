@@ -28,6 +28,9 @@ var migration006BootstrapSQL string
 //go:embed migrations/007_dev_business_bootstrap.sql
 var migration007BusinessBootstrapSQL string
 
+//go:embed migrations/008_user_subscription.sql
+var migration008UserSubscriptionSQL string
+
 func RunMigrations(ctx context.Context, db *DB) error {
 	if db == nil || db.Pool == nil {
 		return fmt.Errorf("database pool is not initialized")
@@ -49,6 +52,7 @@ func RunMigrations(ctx context.Context, db *DB) error {
 		"004_saved_card_image_data":  migration004SQL,
 		"005_business_card_images":   migration005SQL,
 		"007_dev_business_bootstrap": migration007BusinessBootstrapSQL,
+		"008_user_subscription":      migration008UserSubscriptionSQL,
 	} {
 		if _, err := db.Pool.Exec(ctx, sql); err != nil {
 			slog.Warn("Incremental migration note", "migration", name, "error", err)

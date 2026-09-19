@@ -5,11 +5,15 @@ import { colors, radii, spacing, typography } from '../../theme';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { CardStyleModal } from '../../components/CardStyleModal';
+import { UpgradeModal } from '../../components/UpgradeModal';
 import { useAuth } from '../../context/AuthContext';
 
+const FREE_BUSINESS_LIMIT = 2;
+
 export function MyBusinessHubScreen({ onSelectBusiness }) {
-  const { myBusinesses, addMyBusiness } = useAuth();
+  const { myBusinesses, addMyBusiness, isPremiumActive } = useAuth();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [styleBusiness, setStyleBusiness] = useState(null);
   const [form, setForm] = useState({
     business_name: '', category: 'Manufacturing', phone: '', whatsapp: '',
@@ -29,6 +33,14 @@ export function MyBusinessHubScreen({ onSelectBusiness }) {
     city: 'Coimbatore', district: 'Coimbatore', state: 'Tamil Nadu',
     pincode: '', description: '', services: '',
     front_image_data: '', back_image_data: ''
+  };
+
+  const openAddModal = () => {
+    if (!isPremiumActive && myBusinesses.length >= FREE_BUSINESS_LIMIT) {
+      setShowUpgrade(true);
+      return;
+    }
+    setShowAddModal(true);
   };
 
   const readImage = (file, key) => {
@@ -70,9 +82,10 @@ export function MyBusinessHubScreen({ onSelectBusiness }) {
             {myBusinesses.length > 0
               ? `${myBusinesses.length} business${myBusinesses.length > 1 ? 'es' : ''}`
               : 'Showcase your business on CardFlow'}
+            {!isPremiumActive ? ` · ${Math.max(0, FREE_BUSINESS_LIMIT - myBusinesses.length)} free left` : ''}
           </Text>
         </View>
-        <Button title="+ Add" onPress={() => setShowAddModal(true)} size="sm" />
+        <Button title="+ Add" onPress={() => openAddModal()} size="sm" />
       </View>
 
       {toast ? (
@@ -83,7 +96,7 @@ export function MyBusinessHubScreen({ onSelectBusiness }) {
         <View style={styles.emptyInline}>
           <Text style={styles.emptyTitle}>No business yet</Text>
           <Text style={styles.emptySub}>Add your listing to appear in Browse.</Text>
-          <Button title="Add Business" onPress={() => setShowAddModal(true)} size="sm" style={{ marginTop: spacing.md, alignSelf: 'flex-start' }} />
+          <Button title="Add Business" onPress={() => openAddModal()} size="sm" style={{ marginTop: spacing.md, alignSelf: 'flex-start' }} />
         </View>
       ) : (
         myBusinesses.map((biz) => (
@@ -111,7 +124,7 @@ export function MyBusinessHubScreen({ onSelectBusiness }) {
       )}
 
       {myBusinesses.length > 0 ? (
-        <TouchableOpacity style={styles.addAnotherBtn} onPress={() => setShowAddModal(true)}>
+        <TouchableOpacity style={styles.addAnotherBtn} onPress={() => openAddModal()}>
           <Plus size={14} color={colors.primary} />
           <Text style={styles.addAnotherText}>Add another</Text>
         </TouchableOpacity>
@@ -180,6 +193,13 @@ export function MyBusinessHubScreen({ onSelectBusiness }) {
         business={styleBusiness}
         onClose={() => setStyleBusiness(null)}
         onSaved={() => setStyleBusiness(null)}
+      />
+
+      <UpgradeModal
+        visible={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        title="Business limit reached"
+        message="Free plan allows up to 2 businesses. Upgrade to CardFlow Premium for unlimited business listings."
       />
     </ScrollView>
   );

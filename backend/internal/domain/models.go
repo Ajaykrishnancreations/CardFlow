@@ -23,25 +23,37 @@ const (
 )
 
 type User struct {
-	ID                 uuid.UUID        `json:"id"`
-	Phone              string           `json:"phone"`
-	Name               string           `json:"name"`
-	Email              *string          `json:"email,omitempty"`
-	PhotoURL           *string          `json:"photo_url,omitempty"`
-	City               string           `json:"city"`
-	State              string           `json:"state"`
-	Country            string           `json:"country"`
-	Role               UserRole         `json:"role"`
-	Plan               SubscriptionPlan `json:"plan"`
-	FreeScansRemaining int              `json:"free_scans_remaining"`
-	FreeScansResetAt   time.Time        `json:"free_scans_reset_at"`
-	Status             string           `json:"status"`
-	IsIDVerified       bool             `json:"is_id_verified"`
-	CreditBalance      int              `json:"credit_balance"`
-	CreatedAt          time.Time        `json:"created_at"`
-	UpdatedAt          time.Time        `json:"updated_at"`
-	LastLoginAt        *time.Time       `json:"last_login_at,omitempty"`
-	DeletedAt          *time.Time       `json:"deleted_at,omitempty"`
+	ID                    uuid.UUID        `json:"id"`
+	Phone                 string           `json:"phone"`
+	Name                  string           `json:"name"`
+	Email                 *string          `json:"email,omitempty"`
+	PhotoURL              *string          `json:"photo_url,omitempty"`
+	City                  string           `json:"city"`
+	State                 string           `json:"state"`
+	Country               string           `json:"country"`
+	Role                  UserRole         `json:"role"`
+	Plan                  SubscriptionPlan `json:"plan"`
+	FreeScansRemaining    int              `json:"free_scans_remaining"`
+	FreeScansResetAt      time.Time        `json:"free_scans_reset_at"`
+	Status                string           `json:"status"`
+	IsIDVerified          bool             `json:"is_id_verified"`
+	CreditBalance         int              `json:"credit_balance"`
+	IsSubscribed          bool             `json:"is_subscribed"`
+	SubscriptionPlanID    *string          `json:"subscription_plan_id,omitempty"`
+	SubscriptionExpiresAt *time.Time       `json:"subscription_expires_at,omitempty"`
+	CreatedAt             time.Time        `json:"created_at"`
+	UpdatedAt             time.Time        `json:"updated_at"`
+	LastLoginAt           *time.Time       `json:"last_login_at,omitempty"`
+	DeletedAt             *time.Time       `json:"deleted_at,omitempty"`
+}
+
+// IsPremiumActive reports whether the user currently has an unexpired premium
+// subscription — a nil expiry means a lifetime plan, which never expires.
+func (u *User) IsPremiumActive() bool {
+	if u == nil || !u.IsSubscribed {
+		return false
+	}
+	return u.SubscriptionExpiresAt == nil || u.SubscriptionExpiresAt.After(time.Now())
 }
 
 type UserKYC struct {

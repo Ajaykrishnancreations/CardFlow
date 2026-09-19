@@ -23,6 +23,9 @@ import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 import { extractCardWithTesseract, mergeExtractions } from '../../utils/ocrParser';
 import { DetailScreenHeader } from '../../components/DetailScreenHeader';
+import { UpgradeModal } from '../../components/UpgradeModal';
+
+const FREE_SAVED_CARD_LIMIT = 5;
 
 function applyExtractionToForm(data, setters) {
   if (!data) return;
@@ -48,7 +51,8 @@ function applyExtractionToForm(data, setters) {
 }
 
 export function ScanCardScreen({ onCardSaved, onBack }) {
-  const { token, loadUserVault } = useAuth();
+  const { token, loadUserVault, savedCards, isPremiumActive } = useAuth();
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
@@ -289,6 +293,10 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
     }
     if (!frontImage) {
       alert('Front side image is required.');
+      return;
+    }
+    if (!isPremiumActive && (savedCards?.length || 0) >= FREE_SAVED_CARD_LIMIT) {
+      setShowUpgrade(true);
       return;
     }
 
@@ -602,6 +610,13 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
           </Card>
         )}
       </ScrollView>
+
+      <UpgradeModal
+        visible={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        title="Card vault is full"
+        message="Free plan allows up to 5 saved cards. Upgrade to CardFlow Premium to save unlimited cards."
+      />
     </View>
   );
 }

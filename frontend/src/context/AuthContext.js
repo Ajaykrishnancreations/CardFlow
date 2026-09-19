@@ -14,6 +14,11 @@ export function AuthProvider({ children }) {
   const [isNewUser, setIsNewUser] = useState(false);
   const [savedCards, setSavedCards] = useState([]);
   const [myBusinesses, setMyBusinesses] = useState([]);
+  // Global paywall overlay — any screen can call openSubscription() to show
+  // the full plan-chooser without needing its own navigation route.
+  const [subscriptionOverlayOpen, setSubscriptionOverlayOpen] = useState(false);
+  const openSubscription = useCallback(() => setSubscriptionOverlayOpen(true), []);
+  const closeSubscription = useCallback(() => setSubscriptionOverlayOpen(false), []);
 
   // Load user's saved card vault
   const loadUserVault = useCallback(async (authToken) => {
@@ -243,6 +248,9 @@ export function AuthProvider({ children }) {
           freeScansRemaining: apiUser.free_scans_remaining != null ? apiUser.free_scans_remaining : 30,
           credits: apiUser.credit_balance != null ? apiUser.credit_balance : 10,
           isIdVerified: apiUser.is_id_verified || false,
+          isSubscribed: apiUser.is_subscribed || false,
+          subscriptionPlanId: apiUser.subscription_plan_id || null,
+          subscriptionExpiresAt: apiUser.subscription_expires_at || null,
           isNewUser: apiRes?.data?.is_new_user || apiRes?.is_new_user || false
         };
         isBrandNew = matchedAccount.isNewUser;
@@ -260,6 +268,9 @@ export function AuthProvider({ children }) {
           freeScansRemaining: 30,
           credits: 10,
           isIdVerified: false,
+          isSubscribed: false,
+          subscriptionPlanId: null,
+          subscriptionExpiresAt: null,
           isNewUser: isBrandNew
         };
       }
@@ -343,6 +354,43 @@ export function AuthProvider({ children }) {
     } catch (e) {}
     return merged;
   }, [user, token]);
+
+  // Preview-only subscription activation — no payment gateway is wired up yet,
+  // but the resulting is_subscribed/expires_at are real DB state (see
+  // backend billing.ActivatePlan), so gating (theme colors, business/card
+  // limits, premium templates) can be tested end-to-end.
+  const activateSubscription = useCallback(async (planId) => {
+    if (!token) throw new Error('Not signed in');
+    const result = await apiClient.activateSubscription(planId, token);
+    const merged = {
+      ...user,
+      isSubscribed: !!result?.is_subscribed,
+      subscriptionPlanId: result?.subscription_plan_id ?? planId,
+      subscriptionExpiresAt: result?.subscription_expires_at ?? null
+    };
+    setUser(merged);
+    try {
+      localStorage.setItem('cf_user', JSON.stringify(merged));
+    } catch (e) {}
+    return merged;
+  }, [user, token]);
+
+  const cancelSubscription = useCallback(async () => {
+    if (!token) throw new Error('Not signed in');
+    await apiClient.cancelSubscription(token);
+    const merged = { ...user, isSubscribed: false };
+    setUser(merged);
+    try {
+      localStorage.setItem('cf_user', JSON.stringify(merged));
+    } catch (e) {}
+    return merged;
+  }, [user, token]);
+
+  // A nil/missing expiry means a lifetime plan — never expires.
+  const isPremiumActive = !!(
+    user?.isSubscribed &&
+    (!user?.subscriptionExpiresAt || new Date(user.subscriptionExpiresAt) > new Date())
+  );
 
   // Helper to check if a business is already saved in this user's vault
   const isBusinessSaved = useCallback((biz) => {
@@ -453,6 +501,12 @@ export function AuthProvider({ children }) {
         verifyOtp,
         completeOnboarding,
         updateProfile,
+        isPremiumActive,
+        activateSubscription,
+        cancelSubscription,
+        subscriptionOverlayOpen,
+        openSubscription,
+        closeSubscription,
         logout,
         switchActiveBusiness,
         switchToOwnerMode,

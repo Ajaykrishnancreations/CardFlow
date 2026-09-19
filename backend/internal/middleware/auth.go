@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"cardflow-backend/internal/auth"
 	"cardflow-backend/internal/database"
@@ -62,15 +63,22 @@ func (m *Middleware) Authenticate(next http.Handler) http.Handler {
 		// Prefer live role/plan from DB when available
 		if m.db != nil && m.db.Pool != nil {
 			var roleStr, planStr, name, phone string
+			var isSubscribed bool
+			var subPlanID *string
+			var subExpiresAt *time.Time
 			qErr := m.db.Pool.QueryRow(r.Context(), `
-				SELECT phone, COALESCE(name, ''), role::text, plan::text
+				SELECT phone, COALESCE(name, ''), role::text, plan::text,
+				       is_subscribed, subscription_plan_id, subscription_expires_at
 				FROM users WHERE id = $1 AND deleted_at IS NULL
-			`, userUUID).Scan(&phone, &name, &roleStr, &planStr)
+			`, userUUID).Scan(&phone, &name, &roleStr, &planStr, &isSubscribed, &subPlanID, &subExpiresAt)
 			if qErr == nil {
 				user.Phone = phone
 				user.Name = name
 				user.Role = domain.UserRole(roleStr)
 				user.Plan = domain.SubscriptionPlan(planStr)
+				user.IsSubscribed = isSubscribed
+				user.SubscriptionPlanID = subPlanID
+				user.SubscriptionExpiresAt = subExpiresAt
 			}
 		}
 

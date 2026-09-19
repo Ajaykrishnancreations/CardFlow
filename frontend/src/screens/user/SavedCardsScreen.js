@@ -16,8 +16,10 @@ import { apiClient } from '../../services/api';
 import { CardThumbnail } from '../../components/CardThumbnail';
 import { buildVCardBook, downloadTextFile } from '../../utils/vcard';
 
+const FREE_SAVED_CARD_LIMIT = 5;
+
 export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
-  const { user, token, savedCards: contextCards, loadUserVault } = useAuth();
+  const { user, token, savedCards: contextCards, loadUserVault, isPremiumActive } = useAuth();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 860;
 
@@ -132,7 +134,9 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.countTitle}>My Cards</Text>
-        <Text style={styles.countSub}>{cards.length} saved</Text>
+        <Text style={styles.countSub}>
+          {cards.length} saved{!isPremiumActive ? ` · ${Math.max(0, FREE_SAVED_CARD_LIMIT - cards.length)} free left` : ''}
+        </Text>
       </View>
 
       <View style={styles.exportSection}>

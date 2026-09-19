@@ -194,6 +194,8 @@ func main() {
 			r.Get("/billing/plans", billingHandler.GetPlans)
 			r.Post("/billing/verify-purchase", billingHandler.VerifyPurchase)
 			r.Get("/billing/credits", billingHandler.GetCredits)
+			r.Post("/billing/activate", billingHandler.ActivatePlan)
+			r.Post("/billing/cancel", billingHandler.CancelSubscription)
 
 			// Business Owner Endpoints (Multi-Business 1..N)
 			r.Route("/owner", func(r chi.Router) {
