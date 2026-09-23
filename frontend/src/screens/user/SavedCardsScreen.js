@@ -6,7 +6,8 @@ import {
   CloudUpload,
   CloudDownload,
   RefreshCw,
-  ChevronRight
+  ChevronRight,
+  Contact
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { EmptyState } from '../../components/EmptyState';
@@ -18,8 +19,10 @@ import {
   isNativePlatform,
   backupPhoneContacts,
   restoreContactsToPhone,
-  getBackupStatus
+  getBackupStatus,
+  saveAllCardsToPhone
 } from '../../utils/contactsSync';
+import { buildVCardBook, downloadTextFile } from '../../utils/vcard';
 
 function formatBackupTimestamp(iso) {
   if (!iso) return '';
@@ -48,6 +51,8 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   const [backupMsg, setBackupMsg] = useState('');
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [importingCards, setImportingCards] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
 
   const filterTabs = [
     { id: 'all', label: 'All' },
@@ -168,6 +173,28 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
     }
   };
 
+  const handleImportSavedCardsToPhone = async () => {
+    if (!cards.length) {
+      setImportMsg('No saved cards to import yet.');
+      return;
+    }
+    setImportMsg('');
+    if (isNativePlatform()) {
+      setImportingCards(true);
+      try {
+        const result = await saveAllCardsToPhone(cards);
+        setImportMsg(`Added ${result.created} of ${result.total} to your phone.`);
+      } catch (e) {
+        setImportMsg(e?.message || "Couldn't import your saved contacts.");
+      } finally {
+        setImportingCards(false);
+      }
+      return;
+    }
+    downloadTextFile('cardflow-saved-cards.vcf', buildVCardBook(cards));
+    setImportMsg(`${cards.length} contacts downloaded as vCard.`);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -232,21 +259,36 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.tagsFilterWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScroll}>
-          {filterTabs.map((tab) => (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.tagFilterChip, selectedFilter === tab.id && styles.tagFilterChipActive]}
-              onPress={() => setSelectedFilter(tab.id)}
-            >
-              <Text style={[styles.tagFilterText, selectedFilter === tab.id && styles.tagFilterTextActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+      <View style={styles.tagsFilterRow}>
+        <TouchableOpacity
+          style={styles.importToPhoneBtn}
+          onPress={handleImportSavedCardsToPhone}
+          disabled={importingCards}
+          accessibilityLabel="Import saved business contacts to phone"
+        >
+          {importingCards ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Contact size={18} color={colors.primary} />
+          )}
+        </TouchableOpacity>
+        <View style={styles.tagsFilterWrap}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScroll}>
+            {filterTabs.map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.tagFilterChip, selectedFilter === tab.id && styles.tagFilterChipActive]}
+                onPress={() => setSelectedFilter(tab.id)}
+              >
+                <Text style={[styles.tagFilterText, selectedFilter === tab.id && styles.tagFilterTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
       </View>
+      {importMsg ? <Text style={styles.importToPhoneMsg}>{importMsg}</Text> : null}
 
       <ScrollView contentContainerStyle={[styles.cardsScroll, isDesktop && styles.desktopCardsScroll]} showsVerticalScrollIndicator={false}>
         {isLoading ? (
@@ -349,8 +391,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  tagsFilterWrap: { paddingBottom: spacing.xs },
-  tagsScroll: { paddingHorizontal: spacing.lg, gap: 4 },
+  tagsFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: spacing.lg,
+    gap: spacing.sm
+  },
+  importToPhoneBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  importToPhoneMsg: { fontSize: 12, color: colors.textSecondary, paddingHorizontal: spacing.lg, marginTop: -4, marginBottom: spacing.xs },
+  tagsFilterWrap: { flex: 1, paddingBottom: spacing.xs },
+  tagsScroll: { paddingRight: spacing.lg, gap: 4 },
   tagFilterChip: {
     paddingVertical: 6,
     paddingHorizontal: 12,

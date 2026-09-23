@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { ScanLine, Phone, MapPin, User, Contact } from 'lucide-react';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { ScanLine, Phone, MapPin, User } from 'lucide-react';
 import { colors, spacing, shadows, radii, fonts } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { CardThumbnail } from '../../components/CardThumbnail';
-import { isNativePlatform, saveAllCardsToPhone } from '../../utils/contactsSync';
-import { buildVCardBook, downloadTextFile } from '../../utils/vcard';
 
 function getTimeGreeting() {
   const h = new Date().getHours();
@@ -86,27 +84,6 @@ function ScanButton({ onPress }) {
 
 export function DashboardScreen({ onNavigate, onOpenProfile, onSelectCard }) {
   const { user, savedCards, myBusinesses } = useAuth();
-  const [importingCards, setImportingCards] = useState(false);
-  const [importMsg, setImportMsg] = useState('');
-
-  const handleImportSavedCardsToPhone = async () => {
-    if (!savedCards?.length) return;
-    setImportMsg('');
-    if (isNativePlatform()) {
-      setImportingCards(true);
-      try {
-        const result = await saveAllCardsToPhone(savedCards);
-        setImportMsg(`Added ${result.created} of ${result.total} to your phone.`);
-      } catch (e) {
-        setImportMsg(e?.message || "Couldn't import your saved contacts.");
-      } finally {
-        setImportingCards(false);
-      }
-      return;
-    }
-    downloadTextFile('cardflow-saved-cards.vcf', buildVCardBook(savedCards));
-    setImportMsg(`${savedCards.length} contacts downloaded as vCard.`);
-  };
 
   const firstName = (user?.name || 'User').split(' ')[0];
   const cardCount = savedCards?.length || 0;
@@ -168,26 +145,11 @@ export function DashboardScreen({ onNavigate, onOpenProfile, onSelectCard }) {
       {hasCards ? (
         <View style={styles.section}>
           <View style={styles.sectionHead}>
-            <View style={styles.sectionHeadLeft}>
-              <TouchableOpacity
-                style={styles.importToPhoneBtn}
-                onPress={handleImportSavedCardsToPhone}
-                disabled={importingCards}
-                accessibilityLabel="Import saved business contacts to phone"
-              >
-                {importingCards ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Contact size={18} color={colors.primary} />
-                )}
-              </TouchableOpacity>
-              <Text style={styles.sectionTitle}>Recent Cards</Text>
-            </View>
+            <Text style={styles.sectionTitle}>Recent Cards</Text>
             <TouchableOpacity onPress={() => onNavigate?.('user_vault')}>
               <Text style={styles.viewAll}>View All →</Text>
             </TouchableOpacity>
           </View>
-          {importMsg ? <Text style={styles.importToPhoneMsg}>{importMsg}</Text> : null}
 
           {recentCards.map((card) => {
             const name = card.person_name || card.personName || 'Contact';
@@ -381,16 +343,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm
   },
-  sectionHeadLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  importToPhoneBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  importToPhoneMsg: { fontSize: 12, color: colors.textSecondary, marginTop: -4, marginBottom: spacing.sm },
   sectionTitle: {
     fontFamily: fonts.serif,
     fontSize: 18,
