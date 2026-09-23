@@ -425,28 +425,40 @@ export async function preprocessImageForOcr(imageSource) {
   });
 }
 
-// English + Tamil + Hindi, recognized together — CardFlow markets multi-script
-// support, and cards commonly mix an English/Latin phone number or designation
-// with a Tamil or Hindi company/person name on the same line.
-const OCR_LANGUAGES = 'eng+tam+hin';
-
-export async function extractCardWithTesseract(imageSource) {
+// Recognizing English and Indic scripts in ONE combined Tesseract pass
+// (e.g. 'eng+tam+hin') makes the engine hallucinate Tamil/Devanagari glyphs
+// out of ordinary Latin text — a purely English card came back with a
+// Devanagari name and garbage company field once all three were loaded
+// together. Instead, run English and Tamil+Hindi as two INDEPENDENT passes
+// (each only ever tries to match its own script, so neither can corrupt the
+// other) and merge the two structured results field-by-field, keeping
+// whichever pass produced the more confident value — the same confidence
+// merge already used to combine front/back scans.
+async function runOcrPass(imageSource, lang) {
   try {
-    const processed = await preprocessImageForOcr(imageSource);
-    const result = await Tesseract.recognize(processed, OCR_LANGUAGES, {
+    const result = await Tesseract.recognize(imageSource, lang, {
       logger: (m) => {
         if (m.status === 'recognizing text') {
-          console.log(`[OCR] ${(m.progress * 100).toFixed(0)}%`);
+          console.log(`[OCR ${lang}] ${(m.progress * 100).toFixed(0)}%`);
         }
       }
     });
     const text = result.data?.text || '';
-    console.log('[Raw OCR Text]:\n', text);
-    const parsed = parseBusinessCardText(text);
-    console.log('[Structured OCR]:', parsed);
-    return parsed;
+    console.log(`[Raw OCR Text (${lang})]:\n`, text);
+    return parseBusinessCardText(text);
   } catch (error) {
-    console.warn('[Tesseract OCR Error]:', error);
+    console.warn(`[Tesseract OCR Error] (${lang}):`, error);
     return parseBusinessCardText('');
   }
+}
+
+export async function extractCardWithTesseract(imageSource) {
+  const processed = await preprocessImageForOcr(imageSource);
+  const [englishPass, indicPass] = await Promise.all([
+    runOcrPass(processed, 'eng'),
+    runOcrPass(processed, 'tam+hin')
+  ]);
+  const merged = mergeExtractions(englishPass, indicPass);
+  console.log('[Structured OCR]:', merged);
+  return merged;
 }
