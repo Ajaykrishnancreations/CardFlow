@@ -88,7 +88,11 @@ export async function restoreContactsToPhone(token) {
       });
       created += 1;
     } catch (e) {
-      // Skip contacts the OS refuses (e.g. malformed number) and keep restoring the rest.
+      // Skip contacts the OS refuses (e.g. malformed number) and keep
+      // restoring the rest, but log why — this used to fail silently with
+      // no way to tell "nothing to restore" apart from "every contact was
+      // rejected by the OS".
+      console.warn('[restoreContactsToPhone] could not create contact', c?.name, e);
     }
   }
   return { restored: created, total: contacts.length };

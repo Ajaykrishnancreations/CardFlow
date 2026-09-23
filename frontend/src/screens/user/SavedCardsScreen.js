@@ -15,6 +15,8 @@ import { BrandSpinner, SkeletonCard } from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 import { CardThumbnail } from '../../components/CardThumbnail';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Snackbar } from '../../components/Snackbar';
 import {
   isNativePlatform,
   backupPhoneContacts,
@@ -48,11 +50,13 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [backupStatus, setBackupStatus] = useState(null);
-  const [backupMsg, setBackupMsg] = useState('');
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [importingCards, setImportingCards] = useState(false);
-  const [importMsg, setImportMsg] = useState('');
+  const [confirmAction, setConfirmAction] = useState(null); // 'backup' | 'restore' | 'import' | null
+  const [snackbar, setSnackbar] = useState({ visible: false, message: '', type: 'success' });
+
+  const showSnackbar = (message, type = 'success') => setSnackbar({ visible: true, message, type });
 
   const filterTabs = [
     { id: 'all', label: 'All' },
@@ -145,54 +149,77 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
     return true;
   });
 
-  const handleBackupContacts = async () => {
+  const runBackupContacts = async () => {
     setBackingUp(true);
-    setBackupMsg('');
     try {
       const result = await backupPhoneContacts(token);
       const status = await getBackupStatus(token);
       setBackupStatus(status);
-      setBackupMsg(`Backed up ${result.uploaded} contact${result.uploaded === 1 ? '' : 's'}.`);
+      showSnackbar(`Backed up ${result.uploaded} contact${result.uploaded === 1 ? '' : 's'} to CardFlow Cloud.`);
     } catch (e) {
-      setBackupMsg(e?.message || "Couldn't back up your contacts.");
+      showSnackbar(e?.message || "Couldn't back up your contacts.", 'error');
     } finally {
       setBackingUp(false);
     }
   };
 
-  const handleRestoreContacts = async () => {
+  const runRestoreContacts = async () => {
     setRestoring(true);
-    setBackupMsg('');
     try {
       const result = await restoreContactsToPhone(token);
-      setBackupMsg(`Added ${result.restored} of ${result.total} contacts to this phone.`);
+      showSnackbar(`Added ${result.restored} of ${result.total} contacts to this phone.`);
     } catch (e) {
-      setBackupMsg(e?.message || "Couldn't import your contacts.");
+      showSnackbar(e?.message || "Couldn't import your contacts.", 'error');
     } finally {
       setRestoring(false);
     }
   };
 
-  const handleImportSavedCardsToPhone = async () => {
+  const runImportSavedCardsToPhone = async () => {
     if (!cards.length) {
-      setImportMsg('No saved cards to import yet.');
+      showSnackbar('No saved cards to import yet.', 'error');
       return;
     }
-    setImportMsg('');
     if (isNativePlatform()) {
       setImportingCards(true);
       try {
         const result = await saveAllCardsToPhone(cards);
-        setImportMsg(`Added ${result.created} of ${result.total} to your phone.`);
+        showSnackbar(`Added ${result.created} of ${result.total} to your phone.`);
       } catch (e) {
-        setImportMsg(e?.message || "Couldn't import your saved contacts.");
+        showSnackbar(e?.message || "Couldn't import your saved contacts.", 'error');
       } finally {
         setImportingCards(false);
       }
       return;
     }
     downloadTextFile('cardflow-saved-cards.vcf', buildVCardBook(cards));
-    setImportMsg(`${cards.length} contacts downloaded as vCard.`);
+    showSnackbar(`${cards.length} contacts downloaded as vCard.`);
+  };
+
+  const CONFIRM_COPY = {
+    backup: {
+      title: 'Backup phone contacts?',
+      message: 'This reads all contacts saved on your phone and stores them in CardFlow Cloud, replacing any earlier backup.',
+      confirmLabel: 'Backup'
+    },
+    restore: {
+      title: 'Import backed-up contacts?',
+      message: `This adds your ${backupStatus?.count || ''} backed-up contact${backupStatus?.count === 1 ? '' : 's'} to this phone's Contacts app.`,
+      confirmLabel: 'Import'
+    },
+    import: {
+      title: 'Import saved business contacts?',
+      message: 'This adds all of your saved business cards to this phone\'s Contacts app.',
+      confirmLabel: 'Import'
+    }
+  };
+
+  const handleConfirmProceed = () => {
+    const action = confirmAction;
+    setConfirmAction(null);
+    if (action === 'backup') runBackupContacts();
+    else if (action === 'restore') runRestoreContacts();
+    else if (action === 'import') runImportSavedCardsToPhone();
   };
 
   return (
@@ -207,7 +234,7 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
       {isNativePlatform() ? (
         <View style={styles.exportSection}>
           <Text style={styles.exportLabel}>Backup & Export</Text>
-          <TouchableOpacity style={styles.exportRow} onPress={handleBackupContacts} disabled={backingUp}>
+          <TouchableOpacity style={styles.exportRow} onPress={() => setConfirmAction('backup')} disabled={backingUp}>
             <CloudUpload size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
             <View style={{ flex: 1 }}>
               <Text style={styles.exportTitle}>Backup Your Phone Contacts</Text>
@@ -227,7 +254,7 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
           </TouchableOpacity>
 
           {backupStatus?.has_backup ? (
-            <TouchableOpacity style={styles.exportRow} onPress={handleRestoreContacts} disabled={restoring}>
+            <TouchableOpacity style={styles.exportRow} onPress={() => setConfirmAction('restore')} disabled={restoring}>
               <CloudDownload size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.exportTitle}>Import Backed-Up Contacts to This Phone</Text>
@@ -238,8 +265,6 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
               {restoring ? <ActivityIndicator size="small" color={colors.primary} /> : <ChevronRight size={16} color={colors.textMuted} />}
             </TouchableOpacity>
           ) : null}
-
-          {backupMsg ? <Text style={styles.exportResult}>{backupMsg}</Text> : null}
         </View>
       ) : null}
 
@@ -260,18 +285,6 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
       </View>
 
       <View style={styles.tagsFilterRow}>
-        <TouchableOpacity
-          style={styles.importToPhoneBtn}
-          onPress={handleImportSavedCardsToPhone}
-          disabled={importingCards}
-          accessibilityLabel="Import saved business contacts to phone"
-        >
-          {importingCards ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Contact size={18} color={colors.primary} />
-          )}
-        </TouchableOpacity>
         <View style={styles.tagsFilterWrap}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScroll}>
             {filterTabs.map((tab) => (
@@ -287,8 +300,19 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
             ))}
           </ScrollView>
         </View>
+        <TouchableOpacity
+          style={styles.importToPhoneBtn}
+          onPress={() => setConfirmAction('import')}
+          disabled={importingCards}
+          accessibilityLabel="Import saved business contacts to phone"
+        >
+          {importingCards ? (
+            <ActivityIndicator size="small" color={colors.primary} />
+          ) : (
+            <Contact size={18} color={colors.primary} />
+          )}
+        </TouchableOpacity>
       </View>
-      {importMsg ? <Text style={styles.importToPhoneMsg}>{importMsg}</Text> : null}
 
       <ScrollView contentContainerStyle={[styles.cardsScroll, isDesktop && styles.desktopCardsScroll]} showsVerticalScrollIndicator={false}>
         {isLoading ? (
@@ -328,6 +352,21 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
           </View>
         )}
       </ScrollView>
+
+      <ConfirmDialog
+        visible={!!confirmAction}
+        title={confirmAction ? CONFIRM_COPY[confirmAction].title : ''}
+        message={confirmAction ? CONFIRM_COPY[confirmAction].message : ''}
+        confirmLabel={confirmAction ? CONFIRM_COPY[confirmAction].confirmLabel : 'Proceed'}
+        onCancel={() => setConfirmAction(null)}
+        onConfirm={handleConfirmProceed}
+      />
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar((s) => ({ ...s, visible: false }))}
+      />
     </View>
   );
 }
@@ -361,7 +400,6 @@ const styles = StyleSheet.create({
   },
   exportTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
   exportDesc: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
-  exportResult: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 16 },
   exportTimestamp: { fontSize: 10, color: colors.textMuted, textAlign: 'right', lineHeight: 14 },
   topBar: {
     flexDirection: 'row',
@@ -394,7 +432,7 @@ const styles = StyleSheet.create({
   tagsFilterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: spacing.lg,
+    paddingRight: spacing.lg,
     gap: spacing.sm
   },
   importToPhoneBtn: {
@@ -405,9 +443,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  importToPhoneMsg: { fontSize: 12, color: colors.textSecondary, paddingHorizontal: spacing.lg, marginTop: -4, marginBottom: spacing.xs },
   tagsFilterWrap: { flex: 1, paddingBottom: spacing.xs },
-  tagsScroll: { paddingRight: spacing.lg, gap: 4 },
+  tagsScroll: { paddingLeft: spacing.lg, gap: 4 },
   tagFilterChip: {
     paddingVertical: 6,
     paddingHorizontal: 12,

@@ -260,12 +260,6 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
         {viewMode === 'digital' ? (
           <>
             <View style={{ position: 'relative' }}>
-              {isSaved && (
-                <View style={styles.savedBadgeFloating}>
-                  <BookmarkCheck size={14} color="#059669" style={{ marginRight: 4 }} />
-                  <Text style={styles.savedBadgeText}>SAVED</Text>
-                </View>
-              )}
               <BusinessCardPreview ref={cardCaptureRef} business={business} templateId={cardTemplateId} />
             </View>
 
@@ -652,26 +646,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
     position: 'relative'
-  },
-  savedBadgeFloating: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radii.full,
-    zIndex: 10
-  },
-  savedBadgeText: {
-    color: '#059669',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5
   },
   cardStyleActionsRow: {
     flexDirection: 'row',
