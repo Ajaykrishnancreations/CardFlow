@@ -21,6 +21,7 @@ import { CardViewToggle } from '../../components/CardViewToggle';
 import { useAuth } from '../../context/AuthContext';
 import { fetchCardOriginalImageUrl, cardOriginalImagePath, apiClient } from '../../services/api';
 import { buildVCard, downloadTextFile } from '../../utils/vcard';
+import { isNativePlatform, saveContactToPhone } from '../../utils/contactsSync';
 
 function hasWhatsApp(phones) {
   return (phones || []).some((p) => p && (p.is_whatsapp || p.isWhatsApp));
@@ -41,6 +42,7 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
   const [liveCard, setLiveCard] = useState(card);
   const fileInputRef = useRef(null);
   const replaceSideRef = useRef('front');
@@ -181,7 +183,19 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
     }
   };
 
-  const saveContact = () => {
+  const saveContact = async () => {
+    if (isNativePlatform()) {
+      setSavingContact(true);
+      try {
+        await saveContactToPhone(liveCard);
+        alert('Saved to your phone\'s contacts.');
+      } catch (e) {
+        alert(e?.message || "Couldn't save to your phone's contacts.");
+      } finally {
+        setSavingContact(false);
+      }
+      return;
+    }
     downloadTextFile(
       `${(liveCard.person_name || liveCard.company || 'contact').replace(/\s+/g, '_')}.vcf`,
       buildVCard(liveCard)
@@ -373,9 +387,13 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
                   <Text style={styles.actionLabel}>WhatsApp</Text>
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity style={styles.actionBtn} onPress={saveContact}>
+              <TouchableOpacity style={styles.actionBtn} onPress={saveContact} disabled={savingContact}>
                 <UserPlus size={18} color={colors.primary} />
-                <Text style={styles.actionLabel}>Save Contact</Text>
+                <Text style={styles.actionLabel}>
+                  {isNativePlatform()
+                    ? (savingContact ? 'Adding…' : 'Add to Phone Contacts')
+                    : 'Download Contact Card'}
+                </Text>
               </TouchableOpacity>
               {address ? (
                 <TouchableOpacity style={styles.actionBtn} onPress={openMaps}>

@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 import { CardThumbnail } from '../../components/CardThumbnail';
 import { buildVCardBook, downloadTextFile } from '../../utils/vcard';
+import { isNativePlatform, saveAllCardsToPhone } from '../../utils/contactsSync';
 
 const FREE_SAVED_CARD_LIMIT = 5;
 
@@ -28,6 +29,7 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [exportMsg, setExportMsg] = useState('');
+  const [importingToPhone, setImportingToPhone] = useState(false);
 
   const filterTabs = [
     { id: 'all', label: 'All' },
@@ -126,6 +128,19 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
       setExportMsg('No contacts to export yet.');
       return;
     }
+    if (isNativePlatform()) {
+      setImportingToPhone(true);
+      setExportMsg('');
+      try {
+        const result = await saveAllCardsToPhone(cards);
+        setExportMsg(`Added ${result.created} of ${result.total} contacts to your phone.${result.failed ? ` ${result.failed} couldn't be added.` : ''}`);
+      } catch (e) {
+        setExportMsg(e?.message || "Couldn't add contacts to your phone.");
+      } finally {
+        setImportingToPhone(false);
+      }
+      return;
+    }
     downloadTextFile('cardflow-phone-contacts.vcf', buildVCardBook(cards));
     setExportMsg(`${cards.length} contacts downloaded as vCard. Open the file on your phone to save them to Contacts.`);
   };
@@ -149,11 +164,17 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
           </View>
           <ChevronRight size={16} color={colors.textMuted} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.exportRow} onPress={handleSaveToPhone}>
+        <TouchableOpacity style={styles.exportRow} onPress={handleSaveToPhone} disabled={importingToPhone}>
           <Phone size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.exportTitle}>Save to Phone Contacts</Text>
-            <Text style={styles.exportDesc}>Download vCard for your phone</Text>
+            <Text style={styles.exportTitle}>
+              {isNativePlatform() ? 'Import All Cards to Phone Contacts' : 'Save to Phone Contacts'}
+            </Text>
+            <Text style={styles.exportDesc}>
+              {isNativePlatform()
+                ? (importingToPhone ? 'Adding all saved cards…' : 'Add every saved card straight into your phone\'s Contacts app')
+                : 'Download vCard for your phone'}
+            </Text>
           </View>
           <ChevronRight size={16} color={colors.textMuted} />
         </TouchableOpacity>

@@ -199,6 +199,40 @@ export const apiClient = {
     return data.data || data;
   },
 
+  // Uploads a full snapshot of the phone's contacts to the cloud backup.
+  async backupContacts(contacts, token = '') {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/contacts/backup`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ contacts })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not back up contacts');
+    return data.data || data;
+  },
+
+  // Reports whether a cloud backup exists yet, without returning the data.
+  async getContactBackupStatus(token = '') {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/contacts/backup/status`, { headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not check backup status');
+    return data.data || data;
+  },
+
+  // Fetches the actual backed-up contacts, for restoring onto a phone.
+  async getContactBackup(token = '') {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/contacts/backup`, { headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not load contact backup');
+    return data.data || data;
+  },
+
   // 3. Discovery: Categories
   async getCategories() {
     console.log('📡 [API CALL] GET /categories');

@@ -19,6 +19,10 @@ backend/server
 *.apk
 frontend/android/app/build/
 frontend/android/.gradle/
+frontend/ios/App/Pods/
+frontend/ios/App/build/
+**/xcuserdata/
+**/*.xcuserstate
 
 # Allow embedded frontend in backend
 !backend/cmd/api/dist/

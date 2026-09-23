@@ -18,7 +18,8 @@ import {
   Headphones,
   Home,
   Palette,
-  Crown
+  Crown,
+  Cloud
 } from 'lucide-react';
 import { colors, spacing, radii } from '../../theme';
 import { Card } from '../../components/Card';
@@ -27,7 +28,9 @@ import { Button } from '../../components/Button';
 import { ThemeSettings } from '../../components/ThemeSettings';
 import { NotificationSettings } from '../../components/NotificationSettings';
 import { SubscriptionScreen } from '../../components/SubscriptionScreen';
+import { ContactsBackupModal } from '../../components/ContactsBackupModal';
 import { useAuth } from '../../context/AuthContext';
+import { isNativePlatform } from '../../utils/contactsSync';
 
 function formatPhoneDisplay(phone) {
   if (!phone) return '';
@@ -48,6 +51,7 @@ export function ProfileScreen({ onNavigate, onBack }) {
   const [showTheme, setShowTheme] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSubscription, setShowSubscription] = useState(false);
+  const [showContactsBackup, setShowContactsBackup] = useState(false);
 
   useEffect(() => {
     setName(user?.name || '');
@@ -98,6 +102,9 @@ export function ProfileScreen({ onNavigate, onBack }) {
         { icon: Building2, label: 'My Businesses', sub: myBusinesses?.length ? `${myBusinesses.length} business${myBusinesses.length > 1 ? 'es' : ''}` : 'None yet', action: () => onNavigate?.('user_my_business') },
         { icon: CreditCard, label: 'Saved Cards', sub: savedCards?.length ? `${savedCards.length} cards` : 'None yet', action: () => onNavigate?.('user_vault') },
         { icon: Download, label: 'Export & Backup', action: () => onNavigate?.('user_vault') },
+        ...(isNativePlatform()
+          ? [{ icon: Cloud, label: 'Backup & Restore Phone Contacts', sub: 'Cloud backup', action: () => setShowContactsBackup(true) }]
+          : []),
         { icon: Crown, label: 'Subscription', sub: 'Go Premium', action: () => setShowSubscription(true) },
         { icon: Headphones, label: 'Support', action: () => onNavigate?.('user_support') }
       ]
@@ -190,6 +197,8 @@ export function ProfileScreen({ onNavigate, onBack }) {
         <LogOut size={18} color={colors.danger} style={{ marginRight: spacing.sm }} />
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
+
+      <ContactsBackupModal visible={showContactsBackup} onClose={() => setShowContactsBackup(false)} />
     </ScrollView>
   );
 }

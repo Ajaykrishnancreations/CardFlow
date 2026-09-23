@@ -21,6 +21,7 @@ import (
 	"cardflow-backend/internal/business"
 	"cardflow-backend/internal/card"
 	"cardflow-backend/internal/config"
+	"cardflow-backend/internal/contacts"
 	"cardflow-backend/internal/database"
 	"cardflow-backend/internal/discovery"
 	"cardflow-backend/internal/enquiry"
@@ -98,6 +99,7 @@ func main() {
 	cardHandler := card.NewCardHandler(cardSvc, s3Svc)
 	enquiryHandler := enquiry.NewEnquiryHandler(dbPool)
 	billingHandler := billing.NewBillingHandler(dbPool, cfg)
+	contactsHandler := contacts.NewContactsHandler(dbPool)
 	adminHandler := admin.NewAdminHandler(dbPool)
 	supportHandler := support.NewSupportHandler(dbPool)
 
@@ -201,6 +203,11 @@ func main() {
 			r.Post("/billing/cancel", billingHandler.CancelSubscription)
 			r.Get("/billing/transactions", billingHandler.GetTransactions)
 			r.Get("/billing/upgrade-quote", billingHandler.GetUpgradeQuote)
+
+			// Phone contacts backup/restore (native app only — the web build never calls these)
+			r.Post("/contacts/backup", contactsHandler.BackupContacts)
+			r.Get("/contacts/backup/status", contactsHandler.GetBackupStatus)
+			r.Get("/contacts/backup", contactsHandler.GetBackup)
 
 			// Business Owner Endpoints (Multi-Business 1..N)
 			r.Route("/owner", func(r chi.Router) {
