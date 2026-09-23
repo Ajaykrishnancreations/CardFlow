@@ -9,16 +9,22 @@ export function isNativePlatform() {
   }
 }
 
-let pluginPromise = null;
-async function getPlugin() {
-  if (!pluginPromise) {
-    pluginPromise = import('@capacitor-community/contacts').then((m) => m.Contacts);
-  }
-  return pluginPromise;
+// IMPORTANT: never `return`/resolve a Promise with the Capacitor plugin proxy
+// itself as the value. The proxy answers ANY property access (including
+// `then`) with a callable, so promise machinery mistakes it for a nested
+// thenable and calls `.then()' on it — which crashes with "X.then() is not
+// implemented on android/ios". Cache the plugin in a plain module variable
+// instead, and only ever return/await plain data.
+let cachedContacts = null;
+async function ensureContactsPlugin() {
+  if (cachedContacts) return;
+  const mod = await import('@capacitor-community/contacts');
+  cachedContacts = mod.Contacts;
 }
 
 export async function requestContactsPermission() {
-  const Contacts = await getPlugin();
+  await ensureContactsPlugin();
+  const Contacts = cachedContacts;
   const status = await Contacts.checkPermissions();
   if (status.contacts === 'granted') return true;
   const requested = await Contacts.requestPermissions();
@@ -31,7 +37,8 @@ export async function backupPhoneContacts(token) {
   if (!granted) {
     throw new Error('Contacts permission was not granted');
   }
-  const Contacts = await getPlugin();
+  await ensureContactsPlugin();
+  const Contacts = cachedContacts;
   const { contacts } = await Contacts.getContacts({
     projection: { name: true, phones: true, emails: true },
   });
@@ -67,7 +74,8 @@ export async function restoreContactsToPhone(token) {
     throw new Error('No backup found to restore');
   }
 
-  const Contacts = await getPlugin();
+  await ensureContactsPlugin();
+  const Contacts = cachedContacts;
   let created = 0;
   for (const c of contacts) {
     try {
@@ -103,7 +111,8 @@ export async function saveContactToPhone(card) {
   if (!granted) {
     throw new Error('Contacts permission was not granted');
   }
-  const Contacts = await getPlugin();
+  await ensureContactsPlugin();
+  const Contacts = cachedContacts;
   const result = await Contacts.createContact({
     contact: {
       name: { given: name || company || 'Unknown' },
@@ -121,7 +130,8 @@ export async function saveAllCardsToPhone(cards) {
   if (!granted) {
     throw new Error('Contacts permission was not granted');
   }
-  const Contacts = await getPlugin();
+  await ensureContactsPlugin();
+  const Contacts = cachedContacts;
   let created = 0;
   let failed = 0;
   for (const card of cards) {

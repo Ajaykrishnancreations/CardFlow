@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { mockBusinesses } from '../data/mockData';
 import { apiClient } from '../services/api';
+import { syncAuthNotifications } from '../utils/pushNotifications';
 
 const AuthContext = createContext(null);
 
@@ -146,6 +147,7 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const sessionRestoredRef = useRef(false);
+  const [authReady, setAuthReady] = useState(false);
 
   // Restore session once on app startup — must NOT depend on loadUserVault/loadMyBusinesses
   // (those callbacks change when token/user updates, which caused an infinite API loop)
@@ -191,6 +193,8 @@ export function AuthProvider({ children }) {
       }
     } catch (e) {
       console.warn('Could not read session storage', e);
+    } finally {
+      setAuthReady(true);
     }
   }, []);
 
@@ -433,6 +437,17 @@ export function AuthProvider({ children }) {
     user?.isSubscribed &&
     (!user?.subscriptionExpiresAt || new Date(user.subscriptionExpiresAt) > new Date())
   );
+
+  // Re-arms the local push-notification queue whenever the caller's auth
+  // state changes: logged out -> "please log in", logged in free -> "go
+  // premium", logged in premium -> "back up your contacts". Waits for the
+  // session-restore effect above so it never briefly fires "logged out"
+  // for a user who was actually still signed in.
+  useEffect(() => {
+    if (!authReady) return;
+    const authState = !user || !token ? 'logged_out' : isPremiumActive ? 'premium' : 'free';
+    syncAuthNotifications(authState);
+  }, [authReady, user, token, isPremiumActive]);
 
   // Helper to check if a business is already saved in this user's vault
   const isBusinessSaved = useCallback((biz) => {

@@ -15,5 +15,7 @@ AppRegistry.runApplication('CardFlow', {
   rootTag: document.getElementById('root')
 });
 
-// Native shell only (no-op on web) — fires regardless of login state.
+// Native shell only (no-op on web) — just requests notification permission
+// early. AuthContext schedules the actual reminders once it knows whether
+// the user is logged out, logged in free, or logged in premium.
 initPushNotifications();

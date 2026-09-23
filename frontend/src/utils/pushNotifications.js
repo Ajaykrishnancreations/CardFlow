@@ -1,23 +1,46 @@
 // Local push notifications for the native Android/iOS shell (Capacitor).
 // No-op everywhere else (regular web/browser use).
+//
+// Notifications are scheduled per auth state, and the whole queue for the
+// *other* states is cancelled whenever that state changes, so a user never
+// gets a "please log in" nudge after they've logged in, etc.
+//   - logged_out: alternating reminders to log in (ids 1000-4999)
+//   - free (logged in, no active subscription): "go premium" nudge (ids 5000-5999)
+//   - premium (logged in, active subscription): "back up your contacts" nudge (ids 6000-6999)
 
 const PREFS_KEY = 'cf_notification_prefs';
-const PROMO_SENT_KEY = 'cf_promo_notification_sent';
 
 // How far apart the recurring test notifications fire. The product ask was
 // "every 5 minutes" specifically for testing this feature end-to-end.
 const TEST_INTERVAL_MS = 5 * 60 * 1000;
-const TEST_OCCURRENCES = 24; // 2 hours' worth per enabled category
+const TEST_OCCURRENCES = 24;
 
-const MESSAGES = {
+const LOGGED_OUT_MESSAGES = {
   exploreBusiness: {
     title: 'CardFlow',
-    body: 'Hey! Explore new businesses and improve your circle.'
+    body: 'Login and connect with business people near you!'
   },
   addBusiness: {
     title: 'CardFlow',
-    body: 'Add your business to get more clients.'
+    body: "Hurry up! Login and publish your business to everyone."
   }
+};
+
+const FREE_USER_MESSAGE = {
+  title: 'CardFlow',
+  body: 'Hey! Subscribe now and unlock your Premium account.'
+};
+
+const PREMIUM_USER_MESSAGE = {
+  title: 'CardFlow',
+  body: 'Back up your contacts and keep them safe with CardFlow Cloud.'
+};
+
+// Reserved notification-id ranges so cancelling one bucket never touches another.
+const ID_RANGES = {
+  logged_out: { start: 1000, end: 4999 },
+  free: { start: 5000, end: 5999 },
+  premium: { start: 6000, end: 6999 }
 };
 
 const DEFAULT_PREFS = { exploreBusiness: true, addBusiness: true };
@@ -44,42 +67,54 @@ function savePrefs(prefs) {
   }
 }
 
-async function getPlugin() {
-  if (!isNativePlatform()) return null;
-  const { LocalNotifications } = await import('@capacitor/local-notifications');
-  return LocalNotifications;
+// IMPORTANT: never `return`/resolve a Promise with the Capacitor plugin proxy
+// itself as the value. The proxy answers ANY property access (including
+// `then`) with a callable, so promise machinery mistakes it for a nested
+// thenable and calls `.then()` on it — which crashes with "X.then() is not
+// implemented on android/ios". Cache the plugin in a plain module variable
+// instead, and only ever return/await plain data.
+let cachedPlugin = null;
+async function ensurePlugin() {
+  if (!isNativePlatform() || cachedPlugin) return;
+  const mod = await import('@capacitor/local-notifications');
+  cachedPlugin = mod.LocalNotifications;
 }
 
 export async function requestNotificationPermission() {
-  const plugin = await getPlugin();
+  await ensurePlugin();
+  const plugin = cachedPlugin;
   if (!plugin) return false;
   const status = await plugin.requestPermissions();
   return status.display === 'granted';
 }
 
-// (Re)builds the scheduled queue from scratch based on current prefs —
-// simplest way to keep it in sync whenever a toggle changes.
-export async function rescheduleTestNotifications(prefs = getNotificationPrefs()) {
-  const plugin = await getPlugin();
-  if (!plugin) return;
-
+// Cancels not-yet-fired notifications in this id range AND clears any that
+// already fired and are still sitting in the tray — otherwise a stale
+// "please log in" reminder can outlive the login that made it irrelevant.
+async function cancelRange(plugin, range) {
   const pending = await plugin.getPending();
-  const testIds = (pending?.notifications || [])
+  const pendingIds = (pending?.notifications || [])
     .map((n) => n.id)
-    .filter((id) => id >= 1000 && id < 100000);
-  if (testIds.length) {
-    await plugin.cancel({ notifications: testIds.map((id) => ({ id })) });
+    .filter((id) => id >= range.start && id <= range.end);
+  if (pendingIds.length) {
+    await plugin.cancel({ notifications: pendingIds.map((id) => ({ id })) });
   }
 
-  const categories = Object.keys(MESSAGES).filter((key) => prefs[key]);
-  if (categories.length === 0) return;
+  const delivered = await plugin.getDeliveredNotifications();
+  const deliveredIds = (delivered?.notifications || [])
+    .map((n) => n.id)
+    .filter((id) => id >= range.start && id <= range.end);
+  if (deliveredIds.length) {
+    await plugin.removeDeliveredNotificationsById({ ids: deliveredIds });
+  }
+}
 
+function buildSchedule(startId, messages) {
   const now = Date.now();
   const notifications = [];
-  let id = 1000;
+  let id = startId;
   for (let i = 1; i <= TEST_OCCURRENCES; i++) {
-    for (const category of categories) {
-      const msg = MESSAGES[category];
+    for (const msg of messages) {
       notifications.push({
         id: id++,
         title: msg.title,
@@ -88,7 +123,23 @@ export async function rescheduleTestNotifications(prefs = getNotificationPrefs()
       });
     }
   }
-  await plugin.schedule({ notifications });
+  return notifications;
+}
+
+// (Re)builds the logged-out reminder queue from scratch based on current
+// prefs — simplest way to keep it in sync whenever a toggle changes.
+export async function rescheduleTestNotifications(prefs = getNotificationPrefs()) {
+  await ensurePlugin();
+  const plugin = cachedPlugin;
+  if (!plugin) return;
+
+  await cancelRange(plugin, ID_RANGES.logged_out);
+
+  const categories = Object.keys(LOGGED_OUT_MESSAGES).filter((key) => prefs[key]);
+  if (categories.length === 0) return;
+
+  const messages = categories.map((key) => LOGGED_OUT_MESSAGES[key]);
+  await plugin.schedule({ notifications: buildSchedule(ID_RANGES.logged_out.start, messages) });
 }
 
 export async function setNotificationPref(key, enabled) {
@@ -98,42 +149,37 @@ export async function setNotificationPref(key, enabled) {
   return prefs;
 }
 
-// One-off promo for the new Subscription plans — fires shortly after
-// notifications are first enabled, not repeated on every launch.
-export async function sendSubscriptionPromoOnce() {
-  const plugin = await getPlugin();
+// Schedules the reminder queue for the given auth state and clears whatever
+// was scheduled for the other two states. Call this on every login/logout/
+// subscription change so the phone only ever nudges for the current state.
+export async function syncAuthNotifications(authState) {
+  await ensurePlugin();
+  const plugin = cachedPlugin;
   if (!plugin) return;
-  try {
-    if (window.localStorage.getItem(PROMO_SENT_KEY) === '1') return;
-  } catch (e) {
-    // fall through and send anyway
+  const granted = await requestNotificationPermission();
+  if (!granted) return;
+
+  await cancelRange(plugin, ID_RANGES.free);
+  await cancelRange(plugin, ID_RANGES.premium);
+
+  if (authState === 'logged_out') {
+    await rescheduleTestNotifications();
+    return;
   }
-  await plugin.schedule({
-    notifications: [
-      {
-        id: 999,
-        title: 'CardFlow',
-        body: 'Hey! Check out our Subscription plans and get premium features.',
-        schedule: { at: new Date(Date.now() + 10 * 1000) }
-      }
-    ]
-  });
-  try {
-    window.localStorage.setItem(PROMO_SENT_KEY, '1');
-  } catch (e) {
-    // ignore
+
+  // Logged in — the "please log in" reminders no longer apply.
+  await cancelRange(plugin, ID_RANGES.logged_out);
+
+  if (authState === 'free') {
+    await plugin.schedule({ notifications: buildSchedule(ID_RANGES.free.start, [FREE_USER_MESSAGE]) });
+  } else if (authState === 'premium') {
+    await plugin.schedule({ notifications: buildSchedule(ID_RANGES.premium.start, [PREMIUM_USER_MESSAGE]) });
   }
 }
 
-// Call once at app startup: requests permission if needed, then (re)arms
-// the test schedule and the one-off subscription promo when enabled.
+// Call once at app startup, before auth state is known — just arms the
+// permission prompt early so it isn't tied to the first notification sync.
 export async function initPushNotifications() {
   if (!isNativePlatform()) return;
-  const granted = await requestNotificationPermission();
-  if (!granted) return;
-  const prefs = getNotificationPrefs();
-  await rescheduleTestNotifications(prefs);
-  if (prefs.exploreBusiness || prefs.addBusiness) {
-    await sendSubscriptionPromoOnce();
-  }
+  await requestNotificationPermission();
 }
