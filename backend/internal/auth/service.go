@@ -5,14 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"math/big"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -80,72 +76,11 @@ func (s *AuthService) SendOTP(ctx context.Context, rawPhone, deviceID, platform 
 	if err != nil {
 		return nil, err
 	}
-
-	phone, _ := validator.NormalizePhone(rawPhone)
-	if s.cfg.SMSProvider == "fast2sms" && s.cfg.SMSAuthKey != "" {
-		if sendErr := s.sendSMSViaFast2SMS(ctx, phone, code); sendErr != nil {
-			slog.Error("Fast2SMS send failed", "phone", phone, "error", sendErr)
-			return nil, fmt.Errorf("could not send OTP SMS — please try again")
-		}
-		return map[string]interface{}{
-			"success": true,
-			"message": "OTP sent successfully",
-		}, nil
-	}
-
-	// No real SMS provider configured — dev/local fallback echoes the code
-	// so testing doesn't need a phone at all. Never do this once a provider
-	// is set, or the OTP would be pointless as a security check.
 	return map[string]interface{}{
 		"success":     true,
 		"message":     "OTP sent successfully",
 		"otp_preview": code,
 	}, nil
-}
-
-// sendSMSViaFast2SMS delivers the OTP through Fast2SMS's "Quick" route
-// (route=q) — the one that doesn't require a DLT-registered sender ID or
-// content template, at the cost of using their shared/generic sender
-// instead of a custom branded one.
-func (s *AuthService) sendSMSViaFast2SMS(ctx context.Context, e164Phone, code string) error {
-	digits := strings.TrimPrefix(e164Phone, "+91")
-	message := fmt.Sprintf("Your CardFlow OTP is %s. Valid for 5 minutes. Do not share this with anyone.", code)
-
-	reqURL := fmt.Sprintf(
-		"https://www.fast2sms.com/dev/bulkV2?authorization=%s&route=q&message=%s&language=english&flash=0&numbers=%s",
-		url.QueryEscape(s.cfg.SMSAuthKey),
-		url.QueryEscape(message),
-		url.QueryEscape(digits),
-	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return err
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	var result struct {
-		Return  bool        `json:"return"`
-		Message interface{} `json:"message"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return fmt.Errorf("unexpected Fast2SMS response: %s", string(body))
-	}
-	if !result.Return {
-		return fmt.Errorf("fast2sms rejected the request: %v", result.Message)
-	}
-	return nil
 }
 
 // VerifyOTP validates the generated OTP, loads/creates the user from PostgreSQL, and issues JWTs.
