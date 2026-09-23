@@ -24,13 +24,15 @@ import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 import { CardViewToggle } from '../../components/CardViewToggle';
 import { BusinessCardPreview } from '../../components/BusinessCardTemplates';
 import { CardStyleModal } from '../../components/CardStyleModal';
+import { Snackbar } from '../../components/Snackbar';
 import { useAuth } from '../../context/AuthContext';
 import { fetchCardOriginalImageUrl } from '../../services/api';
 import { getCardTemplate } from '../../utils/cardTemplateStorage';
 import { downloadCardAs } from '../../utils/cardDownload';
 
 export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBusinessUpdated }) {
-  const { user, token, myBusinesses, updateMyBusiness, isBusinessSaved, saveBusinessToVault } = useAuth();
+  const { user, token, myBusinesses, updateMyBusiness, isBusinessSaved, saveBusinessToVault, unsaveBusinessFromVault } = useAuth();
+  const [snackbar, setSnackbar] = useState({ visible: false, message: '', type: 'success' });
   const [showEnquiryModal, setShowEnquiryModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [viewMode, setViewMode] = useState('digital');
@@ -108,10 +110,21 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
   const isSaved = isBusinessSaved(business);
 
   const handleSaveToVault = async () => {
-    if (isSaved || isSaving) return;
+    if (isSaving) return;
     setIsSaving(true);
-    await saveBusinessToVault(business);
-    setIsSaving(false);
+    try {
+      if (isSaved) {
+        await unsaveBusinessFromVault(business);
+        setSnackbar({ visible: true, message: `Removed ${business.name || 'business'} from My Cards.`, type: 'success' });
+      } else {
+        await saveBusinessToVault(business);
+        setSnackbar({ visible: true, message: `Saved ${business.name || 'business'} to My Cards.`, type: 'success' });
+      }
+    } catch (e) {
+      setSnackbar({ visible: true, message: e?.message || "Couldn't update this business.", type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSendEnquiry = () => {
@@ -317,7 +330,7 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
             <TouchableOpacity
               style={styles.actionCircleBtn}
               onPress={handleSaveToVault}
-              disabled={isSaved || isSaving}
+              disabled={isSaving}
             >
               <View style={[styles.actionCircle, { backgroundColor: colors.primaryLight }]}>
                 {isSaved ? (
@@ -533,6 +546,13 @@ export function BusinessDetailsScreen({ business, onBack, onHome, onShowQr, onBu
           setCardTemplateId(tpl);
           setShowStyleModal(false);
         }}
+      />
+
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar((s) => ({ ...s, visible: false }))}
       />
     </View>
   );
