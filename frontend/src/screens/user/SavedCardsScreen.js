@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions, ActivityIndicator } from 'react-native';
 import {
   FolderOpen,
   Search,
-  Download,
-  Phone,
+  CloudUpload,
+  CloudDownload,
   RefreshCw,
   ChevronRight
 } from 'lucide-react';
@@ -14,8 +14,24 @@ import { BrandSpinner, SkeletonCard } from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 import { CardThumbnail } from '../../components/CardThumbnail';
-import { buildVCardBook, downloadTextFile } from '../../utils/vcard';
-import { isNativePlatform, saveAllCardsToPhone } from '../../utils/contactsSync';
+import {
+  isNativePlatform,
+  backupPhoneContacts,
+  restoreContactsToPhone,
+  getBackupStatus
+} from '../../utils/contactsSync';
+
+function formatBackupTimestamp(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, ' ');
+    return `${time} on ${date}`;
+  } catch (e) {
+    return '';
+  }
+}
 
 const FREE_SAVED_CARD_LIMIT = 5;
 
@@ -28,8 +44,10 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
-  const [exportMsg, setExportMsg] = useState('');
-  const [importingToPhone, setImportingToPhone] = useState(false);
+  const [backupStatus, setBackupStatus] = useState(null);
+  const [backupMsg, setBackupMsg] = useState('');
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
   const filterTabs = [
     { id: 'all', label: 'All' },
@@ -97,6 +115,14 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
     }
   }, [contextCards]);
 
+  // Check once whether a phone-contacts backup already exists, so the
+  // "Import Contacts to This Phone" row only appears once there's actually
+  // something to restore.
+  useEffect(() => {
+    if (!isNativePlatform() || !token) return;
+    getBackupStatus(token).then(setBackupStatus).catch(() => {});
+  }, [token]);
+
   const filteredCards = cards.filter((c) => {
     if (selectedFilter === 'recent') {
       const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -114,35 +140,32 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
     return true;
   });
 
-  const handleExportGoogle = () => {
-    if (!cards.length) {
-      setExportMsg('No contacts to export yet.');
-      return;
+  const handleBackupContacts = async () => {
+    setBackingUp(true);
+    setBackupMsg('');
+    try {
+      const result = await backupPhoneContacts(token);
+      const status = await getBackupStatus(token);
+      setBackupStatus(status);
+      setBackupMsg(`Backed up ${result.uploaded} contact${result.uploaded === 1 ? '' : 's'}.`);
+    } catch (e) {
+      setBackupMsg(e?.message || "Couldn't back up your contacts.");
+    } finally {
+      setBackingUp(false);
     }
-    downloadTextFile('cardflow-google-contacts.vcf', buildVCardBook(cards));
-    setExportMsg(`${cards.length} contacts downloaded as vCard. In Google Contacts, use Import to add them. OAuth export is not configured on this build.`);
   };
 
-  const handleSaveToPhone = async () => {
-    if (!cards.length) {
-      setExportMsg('No contacts to export yet.');
-      return;
+  const handleRestoreContacts = async () => {
+    setRestoring(true);
+    setBackupMsg('');
+    try {
+      const result = await restoreContactsToPhone(token);
+      setBackupMsg(`Added ${result.restored} of ${result.total} contacts to this phone.`);
+    } catch (e) {
+      setBackupMsg(e?.message || "Couldn't import your contacts.");
+    } finally {
+      setRestoring(false);
     }
-    if (isNativePlatform()) {
-      setImportingToPhone(true);
-      setExportMsg('');
-      try {
-        const result = await saveAllCardsToPhone(cards);
-        setExportMsg(`Added ${result.created} of ${result.total} contacts to your phone.${result.failed ? ` ${result.failed} couldn't be added.` : ''}`);
-      } catch (e) {
-        setExportMsg(e?.message || "Couldn't add contacts to your phone.");
-      } finally {
-        setImportingToPhone(false);
-      }
-      return;
-    }
-    downloadTextFile('cardflow-phone-contacts.vcf', buildVCardBook(cards));
-    setExportMsg(`${cards.length} contacts downloaded as vCard. Open the file on your phone to save them to Contacts.`);
   };
 
   return (
@@ -154,32 +177,44 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
         </Text>
       </View>
 
-      <View style={styles.exportSection}>
-        <Text style={styles.exportLabel}>Backup & Export</Text>
-        <TouchableOpacity style={styles.exportRow} onPress={handleExportGoogle}>
-          <Download size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.exportTitle}>Export to Google Contacts</Text>
-            <Text style={styles.exportDesc}>Download vCard for Google Import</Text>
-          </View>
-          <ChevronRight size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.exportRow} onPress={handleSaveToPhone} disabled={importingToPhone}>
-          <Phone size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.exportTitle}>
-              {isNativePlatform() ? 'Import All Cards to Phone Contacts' : 'Save to Phone Contacts'}
-            </Text>
-            <Text style={styles.exportDesc}>
-              {isNativePlatform()
-                ? (importingToPhone ? 'Adding all saved cards…' : 'Add every saved card straight into your phone\'s Contacts app')
-                : 'Download vCard for your phone'}
-            </Text>
-          </View>
-          <ChevronRight size={16} color={colors.textMuted} />
-        </TouchableOpacity>
-        {exportMsg ? <Text style={styles.exportResult}>{exportMsg}</Text> : null}
-      </View>
+      {isNativePlatform() ? (
+        <View style={styles.exportSection}>
+          <Text style={styles.exportLabel}>Backup & Export</Text>
+          <TouchableOpacity style={styles.exportRow} onPress={handleBackupContacts} disabled={backingUp}>
+            <CloudUpload size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.exportTitle}>Backup Your Phone Contacts</Text>
+              <Text style={styles.exportDesc}>
+                {backingUp ? 'Reading your phone contacts…' : 'Save all your saved mobile contacts to CardFlow Cloud'}
+              </Text>
+            </View>
+            {backingUp ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : backupStatus?.backed_up_at ? (
+              <Text style={styles.exportTimestamp}>
+                Last update:{'\n'}{formatBackupTimestamp(backupStatus.backed_up_at)}
+              </Text>
+            ) : (
+              <ChevronRight size={16} color={colors.textMuted} />
+            )}
+          </TouchableOpacity>
+
+          {backupStatus?.has_backup ? (
+            <TouchableOpacity style={styles.exportRow} onPress={handleRestoreContacts} disabled={restoring}>
+              <CloudDownload size={16} color={colors.primary} style={{ marginRight: spacing.sm }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.exportTitle}>Import Backed-Up Contacts to This Phone</Text>
+                <Text style={styles.exportDesc}>
+                  {restoring ? 'Adding contacts to this phone…' : `Restore your ${backupStatus.count} backed-up contact${backupStatus.count === 1 ? '' : 's'}`}
+                </Text>
+              </View>
+              {restoring ? <ActivityIndicator size="small" color={colors.primary} /> : <ChevronRight size={16} color={colors.textMuted} />}
+            </TouchableOpacity>
+          ) : null}
+
+          {backupMsg ? <Text style={styles.exportResult}>{backupMsg}</Text> : null}
+        </View>
+      ) : null}
 
       <View style={[styles.topBar, isDesktop && styles.desktopTopBar]}>
         <View style={styles.searchInputWrap}>
@@ -285,6 +320,7 @@ const styles = StyleSheet.create({
   exportTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
   exportDesc: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
   exportResult: { fontSize: 12, color: colors.textSecondary, marginTop: spacing.xs, lineHeight: 16 },
+  exportTimestamp: { fontSize: 10, color: colors.textMuted, textAlign: 'right', lineHeight: 14 },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',

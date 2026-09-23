@@ -1,4 +1,4 @@
-import Tesseract from 'tesseract.js';
+import { createWorker } from 'tesseract.js';
 
 const GSTIN_REGEX = /\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b/i;
 const EMAIL_REGEX = /[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
@@ -425,40 +425,48 @@ export async function preprocessImageForOcr(imageSource) {
   });
 }
 
-// Recognizing English and Indic scripts in ONE combined Tesseract pass
-// (e.g. 'eng+tam+hin') makes the engine hallucinate Tamil/Devanagari glyphs
-// out of ordinary Latin text — a purely English card came back with a
-// Devanagari name and garbage company field once all three were loaded
-// together. Instead, run English and Tamil+Hindi as two INDEPENDENT passes
-// (each only ever tries to match its own script, so neither can corrupt the
-// other) and merge the two structured results field-by-field, keeping
-// whichever pass produced the more confident value — the same confidence
-// merge already used to combine front/back scans.
-async function runOcrPass(imageSource, lang) {
+// English only. Loading Tamil/Hindi language data (even run as a separate
+// pass and merged by confidence) still occasionally let Devanagari/Tamil
+// glyphs leak into the final result on real, visually noisy photos — this
+// app scans and fills in English-language cards, so there is no reason to
+// give the recognizer any chance to reach for a non-Latin character.
+// tessedit_char_whitelist further constrains the model to characters that
+// can actually appear on an English business card, which measurably reduces
+// garbage output on cluttered/decorative card designs.
+const OCR_CHAR_WHITELIST =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,:;/@#&+-_'\"()[]|%*";
+
+export async function extractCardWithTesseract(imageSource) {
+  let worker = null;
   try {
-    const result = await Tesseract.recognize(imageSource, lang, {
+    const processed = await preprocessImageForOcr(imageSource);
+    worker = await createWorker('eng', 1, {
       logger: (m) => {
         if (m.status === 'recognizing text') {
-          console.log(`[OCR ${lang}] ${(m.progress * 100).toFixed(0)}%`);
+          console.log(`[OCR] ${(m.progress * 100).toFixed(0)}%`);
         }
       }
     });
+    // Constrains the recognizer to characters an English business card can
+    // actually contain, so cluttered/decorative backgrounds are far less
+    // likely to get misread as stray non-Latin-looking symbols. PSM 11
+    // ("sparse text") suits a card layout — several disconnected lines of
+    // text scattered over a photo/graphic — much better than the default
+    // "assume one page of uniform text" mode.
+    await worker.setParameters({
+      tessedit_char_whitelist: OCR_CHAR_WHITELIST,
+      tessedit_pageseg_mode: '11'
+    });
+    const result = await worker.recognize(processed);
     const text = result.data?.text || '';
-    console.log(`[Raw OCR Text (${lang})]:\n`, text);
-    return parseBusinessCardText(text);
+    console.log('[Raw OCR Text]:\n', text);
+    const parsed = parseBusinessCardText(text);
+    console.log('[Structured OCR]:', parsed);
+    return parsed;
   } catch (error) {
-    console.warn(`[Tesseract OCR Error] (${lang}):`, error);
+    console.warn('[Tesseract OCR Error]:', error);
     return parseBusinessCardText('');
+  } finally {
+    if (worker) await worker.terminate();
   }
-}
-
-export async function extractCardWithTesseract(imageSource) {
-  const processed = await preprocessImageForOcr(imageSource);
-  const [englishPass, indicPass] = await Promise.all([
-    runOcrPass(processed, 'eng'),
-    runOcrPass(processed, 'tam+hin')
-  ]);
-  const merged = mergeExtractions(englishPass, indicPass);
-  console.log('[Structured OCR]:', merged);
-  return merged;
 }
