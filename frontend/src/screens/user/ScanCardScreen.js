@@ -24,6 +24,7 @@ import { apiClient } from '../../services/api';
 import { extractCardWithTesseract, mergeExtractions } from '../../utils/ocrParser';
 import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 import { UpgradeModal } from '../../components/UpgradeModal';
+import { CardCornerAdjuster } from '../../components/CardCornerAdjuster';
 
 const FREE_SAVED_CARD_LIMIT = 5;
 
@@ -61,7 +62,8 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
   const [captureSide, setCaptureSide] = useState('front');
   const [frontImage, setFrontImage] = useState(null);
   const [backImage, setBackImage] = useState(null);
-  const [phase, setPhase] = useState('capture'); // capture | preview | review | saved
+  const [pendingImage, setPendingImage] = useState(null);
+  const [phase, setPhase] = useState('capture'); // capture | adjust | preview | review | saved
   const [savedCard, setSavedCard] = useState(null);
 
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -146,10 +148,22 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
   };
 
   const assignImage = (dataUrl) => {
-    if (captureSide === 'back') setBackImage(dataUrl);
-    else setFrontImage(dataUrl);
-    setPhase('preview');
+    setPendingImage(dataUrl);
+    setPhase('adjust');
     setImageRotation(0);
+  };
+
+  const handleCornerAdjustConfirm = (correctedDataUrl) => {
+    if (captureSide === 'back') setBackImage(correctedDataUrl);
+    else setFrontImage(correctedDataUrl);
+    setPendingImage(null);
+    setPhase('preview');
+  };
+
+  const handleCornerAdjustCancel = () => {
+    setPendingImage(null);
+    setPhase('capture');
+    startCamera();
   };
 
   const captureFromCamera = () => {
@@ -356,11 +370,13 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
   const headerTitle =
     phase === 'saved' ? 'Card Saved' :
     phase === 'review' ? 'Review Card' :
+    phase === 'adjust' ? 'Straighten Card' :
     captureSide === 'back' ? 'Scan Back Side' : 'Scan Front Side';
 
   const headerSub =
     phase === 'saved' ? 'Your card is stored in My Cards' :
     phase === 'review' ? 'Correct any OCR mistakes before saving' :
+    phase === 'adjust' ? 'Line up the 4 corners with the card edges' :
     captureSide === 'back' ? 'Capture extra contact details from the back' :
     'Capture the front of the visiting card';
 
@@ -415,7 +431,15 @@ export function ScanCardScreen({ onCardSaved, onBack }) {
           </View>
         </View>
 
-        {phase !== 'review' ? (
+        {phase === 'adjust' && pendingImage ? (
+          <CardCornerAdjuster
+            imageSrc={pendingImage}
+            onConfirm={handleCornerAdjustConfirm}
+            onCancel={handleCornerAdjustCancel}
+          />
+        ) : null}
+
+        {phase !== 'review' && phase !== 'adjust' ? (
           <View
             style={[styles.previewFrame, phase === 'preview' && styles.previewFrameReview, isDragging && styles.previewFrameDragging]}
             onDragOver={handleDragOver}
@@ -647,17 +671,19 @@ const styles = StyleSheet.create({
   successTitle: { ...typography.titleMedium, marginBottom: spacing.sm },
   successSub: { ...typography.bodyMedium, textAlign: 'center', marginBottom: spacing.xxl, maxWidth: 280 },
   previewFrame: {
-    width: '100%', minHeight: 220, backgroundColor: '#1A1228', borderRadius: radii.lg,
+    // A real business card is landscape, roughly 1.6:1 — lock the guide
+    // frame to that ratio so it doesn't render near-square on tall screens.
+    width: '100%', aspectRatio: 1.6, backgroundColor: '#1A1228', borderRadius: radii.lg,
     borderWidth: 2, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
     overflow: 'hidden', marginBottom: spacing.sm
   },
-  previewFrameReview: { minHeight: 280, maxHeight: 360 },
+  previewFrameReview: {},
   previewFrameDragging: { borderColor: colors.primary, backgroundColor: 'rgba(50, 20, 95, 0.08)' },
   previewWrap: {
-    width: '100%', height: '100%', minHeight: 280, position: 'relative',
+    width: '100%', height: '100%', position: 'relative',
     alignItems: 'center', justifyContent: 'center', padding: spacing.sm, backgroundColor: '#1A1228'
   },
-  cardImage: { maxWidth: '100%', maxHeight: 300, objectFit: 'contain', borderRadius: radii.md },
+  cardImage: { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: radii.md },
   previewActionsRow: { position: 'absolute', bottom: 10, flexDirection: 'row', gap: 8 },
   previewActionBtn: {
     backgroundColor: 'rgba(50, 20, 95, 0.85)', flexDirection: 'row', alignItems: 'center',
@@ -665,8 +691,7 @@ const styles = StyleSheet.create({
   },
   previewActionText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
   alignmentGuide: {
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xl, minHeight: 220
+    width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg
   },
   guideTitle: {
     color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginTop: spacing.sm,

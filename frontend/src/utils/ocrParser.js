@@ -5,17 +5,36 @@ const EMAIL_REGEX = /[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi;
 const WEBSITE_REGEX = /(?:https?:\/\/)?(?:www\.)?[a-zA-Z0-9][-a-zA-Z0-9.]{0,60}\.[a-zA-Z]{2,}(?:\/[^\s]*)?/gi;
 const INDIAN_PHONE_REGEX = /(?:\+91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}/g;
 const PINCODE_REGEX = /\b([1-9]\d{5})\b/;
-const COMPANY_SUFFIXES = /\b(TRADERS|TRADING|ENTERPRISES|SOLUTIONS|TECHNOLOGIES|INDUSTRIES|WORKS|SERVICES|PVT\.?\s*LTD\.?|PRIVATE\s+LIMITED|LTD\.?|LLP|INC\.?|CORP\.?|COMPANY|CO\.|AGENCY|STEELS?|FABRICS?|TOOLS?)\b/i;
+
+// Devanagari (Hindi) and Tamil Unicode blocks \u2014 the two regional scripts
+// CardFlow advertises OCR support for, alongside English/Latin.
+const DEVANAGARI_RANGE = '\\u0900-\\u097F';
+const TAMIL_RANGE = '\\u0B80-\\u0BFF';
+const INDIC_SCRIPT_REGEX = new RegExp(`[${DEVANAGARI_RANGE}${TAMIL_RANGE}]`);
+// A "name/company-safe" character: Latin letters, or Tamil/Devanagari letters.
+const NAME_CHARS_REGEX = new RegExp(`^[A-Za-z${DEVANAGARI_RANGE}${TAMIL_RANGE}][A-Za-z${DEVANAGARI_RANGE}${TAMIL_RANGE}.'\\s-]*$`);
+
+const COMPANY_SUFFIXES = /\b(TRADERS|TRADING|ENTERPRISES|SOLUTIONS|TECHNOLOGIES|INDUSTRIES|WORKS|SERVICES|PVT\.?\s*LTD\.?|PRIVATE\s+LIMITED|LTD\.?|LLP|INC\.?|CORP\.?|COMPANY|CO\.|AGENCY|STEELS?|FABRICS?|TOOLS?|REAL\s+ESTATE|CONSTRUCTIONS?)\b/i;
+// Common Tamil/Hindi transliterations of the same business-type words above \u2014
+// real regional cards usually print the English loanword in local script
+// rather than translating it (e.g. "\u0B95\u0BA9\u0BCD\u0BB8\u0BCD\u0B9F\u0BCD\u0BB0\u0B95\u0BCD\u0BB7\u0BA9\u0BCD\u0BB8\u0BCD" for "Constructions").
+const COMPANY_SUFFIXES_INDIC = /(\u0B95\u0BA9\u0BCD\u0BB8\u0BCD\u0B9F\u0BCD\u0BB0\u0B95\u0BCD\u0BB7\u0BA9\u0BCD\u0BB8\u0BCD|\u0B8E\u0BA3\u0BCD\u0B9F\u0BB0\u0BCD\u0BAA\u0BBF\u0BB0\u0BC8\u0B9A(\u0BB8\u0BCD|\u0BC6\u0BB8\u0BCD)|\u0B9F\u0BBF\u0BB0\u0BC7\u0B9F\u0BB0\u0BCD\u0BB8\u0BCD|\u0B87\u0BA3\u0BCD\u0B9F\u0BB8\u0BCD\u0B9F\u0BCD\u0BB0\u0BC0\u0BB8\u0BCD|\u0B9A\u0BCA\u0BB2\u0BC2\u0BB7\u0BA9\u0BCD\u0BB8\u0BCD|\u0B9F\u0BC6\u0B95\u0BCD\u0BA9\u0BBE\u0BB2\u0B9C\u0BC0\u0BB8\u0BCD|\u0BB0\u0BBF\u0BAF\u0BB2\u0BCD\s*\u0B8E\u0BB8\u0BCD\u0B9F\u0BC7\u0B9F\u0BCD|\u0B95\u0BAE\u0BCD\u0BAA\u0BC6\u0BA9\u0BBF|\u0907\u0902\u091F\u0930\u092A\u094D\u0930\u093E\u0907\u091C\u0947\u091C|\u091F\u094D\u0930\u0947\u0921\u0930\u094D\u0938|\u0907\u0902\u0921\u0938\u094D\u091F\u094D\u0930\u0940\u091C|\u0938\u0949\u0932\u094D\u092F\u0942\u0936\u0902\u0938|\u0915\u0902\u092A\u0928\u0940|\u092A\u094D\u0930\u093E\u0907\u0935\u0947\u091F\s*\u0932\u093F\u092E\u093F\u091F\u0947\u0921)/;
 const DESIGNATION_WORDS = /\b(Managing\s+Partner|Managing\s+Director|General\s+Manager|Sales\s+Manager|Partner|Director|Manager|Founder|Proprietor|Owner|CEO|CTO|CFO|Consultant|Engineer|Agent)\b/i;
 const NOISE_LINE = /^(file|edit|view|bookmarks|profiles|tab|window|help|chrome|safari|since\s+\d{4}|est\.?\s*\d{4}|phone|mobile|email|website|gstin?|gst|tel|fax|www)$/i;
 const PRODUCT_WORDS = /\b(iron|scrap|steel|cnc|milling|fabric|textile|tools?|software|erp|cloud)\b/i;
+const ADDRESS_WORDS = /\b(nagar|road|street|avenue|layout|estate|district|tamil\s*nadu|coimbatore|chennai|bangalore|bengaluru|\u0BA8\u0B95\u0BB0\u0BCD|\u0BA4\u0BC6\u0BB0\u0BC1|\u0B9A\u0BBE\u0BB2\u0BC8|\u0BAE\u0BBE\u0BB5\u0B9F\u0BCD\u0B9F\u0BAE\u0BCD|\u0928\u0917\u0930|\u092E\u093E\u0930\u094D\u0917|\u0930\u094B\u0921)\b/i;
+// A line that opens with a personal honorific or a bare initial ("L.", "R.",
+// "Er.A.", "Pro.", "Dr.", "Shri", "\u0936\u094D\u0930\u0940", "\u0921\u0949", "\u0BAA\u0BCA\u0BB1\u0BBF\u0BAF\u0BBE\u0BB3\u0BB0\u0BCD") is a person's
+// name/title line, never the company name \u2014 even when it also contains
+// Indic script and multiple words, which would otherwise score like one.
+const HONORIFIC_OR_INITIAL_REGEX = /^(mr|mrs|ms|dr|er|eng|prof|pro|adv|shri|smt|\u0936\u094D\u0930\u0940|\u0936\u094D\u0930\u0940\u092E\u0924\u0940|\u0921\u0949|\u092A\u094D\u0930\u094B|\u0907\u0902\u091C\u0940|\u0BA4\u0BBF\u0BB0\u0BC1|\u0BA4\u0BBF\u0BB0\u0BC1\u0BAE\u0BA4\u0BBF|\u0B9A\u0BC6\u0BB2\u0BCD\u0BB5\u0BBF|\u0B9F\u0BBE\u0B95\u0BCD\u0B9F\u0BB0\u0BCD|\u0BAA\u0BCA\u0BB1\u0BBF\u0BAF\u0BBE\u0BB3\u0BB0\u0BCD)\.?\s|^[A-Za-z]\.[A-Za-z]?\.?\s*[A-Za-z\u0900-\u097F\u0B80-\u0BFF]/i;
 
-function stripScripts(text) {
+// Trims whitespace only \u2014 earlier versions of this parser deleted Tamil,
+// Devanagari and other Indic-script runs here, which meant regional-language
+// cards silently extracted nothing. Keep the text; only noise-filter it.
+function normalizeLine(text) {
   if (!text) return '';
-  return text
-    .replace(/[\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u0B80-\u0BFF\u0C00-\u0C7F]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 function isValidGstin(value) {
@@ -113,14 +132,13 @@ function extractPincode(text) {
 function extractAddress(lines, fullText) {
   const addrLines = [];
   for (const line of lines) {
-    const clean = stripScripts(line);
-    const lower = clean.toLowerCase();
+    const clean = normalizeLine(line);
     if (clean.length < 6) continue;
     if (clean.match(EMAIL_REGEX) || clean.match(INDIAN_PHONE_REGEX) || clean.match(WEBSITE_REGEX)) continue;
     if (GSTIN_REGEX.test(clean.replace(/\s/g, ''))) continue;
     if (
       PINCODE_REGEX.test(clean) ||
-      /\b(nagar|road|street|street|avenue|layout|estate|district|tamil\s*nadu|coimbatore|chennai|bangalore|bengaluru)\b/i.test(lower) ||
+      ADDRESS_WORDS.test(clean) ||
       /^\d+[\/\\-]/.test(clean)
     ) {
       const addr = clean.replace(/^(address|addr)[:\s]*/i, '').trim();
@@ -135,16 +153,25 @@ function extractAddress(lines, fullText) {
 function extractCompany(lines) {
   const candidates = [];
   for (const line of lines) {
-    const clean = stripScripts(line);
+    const clean = normalizeLine(line);
     if (clean.length < 3 || clean.length > 60) continue;
     if (NOISE_LINE.test(clean)) continue;
     if (clean.match(EMAIL_REGEX) || clean.match(INDIAN_PHONE_REGEX) || clean.match(WEBSITE_REGEX)) continue;
-    if (DESIGNATION_WORDS.test(clean) && !COMPANY_SUFFIXES.test(clean)) continue;
-    if (PRODUCT_WORDS.test(clean) && !COMPANY_SUFFIXES.test(clean) && clean.length < 20) continue;
+    const hasSuffix = COMPANY_SUFFIXES.test(clean) || COMPANY_SUFFIXES_INDIC.test(clean);
+    if (HONORIFIC_OR_INITIAL_REGEX.test(clean) && !hasSuffix) continue;
+    if (DESIGNATION_WORDS.test(clean) && !hasSuffix) continue;
+    if (PRODUCT_WORDS.test(clean) && !hasSuffix && clean.length < 20) continue;
 
+    const isIndic = INDIC_SCRIPT_REGEX.test(clean);
     let score = 0;
-    if (COMPANY_SUFFIXES.test(clean)) score += 50;
-    if (clean === clean.toUpperCase() && /[A-Z]{3,}/.test(clean)) score += 30;
+    if (hasSuffix) score += 50;
+    // The all-caps heuristic only means anything for cased (Latin) text —
+    // Tamil/Devanagari have no case, so `clean.toUpperCase() === clean` is
+    // trivially true for them and must not be read as "shouting company name".
+    if (!isIndic && clean === clean.toUpperCase() && /[A-Z]{3,}/.test(clean)) score += 30;
+    // A standalone Indic-script line with no phone/email/address/etc is very
+    // likely the business name — give it a modest baseline signal.
+    if (isIndic && !ADDRESS_WORDS.test(clean) && !PINCODE_REGEX.test(clean) && clean.split(/\s+/).length >= 2) score += 20;
     if (clean.split(/\s+/).length >= 2) score += 10;
     if (clean.length >= 8) score += 8;
     if (score >= 30) candidates.push({ value: clean.replace(/^(since|est\.?)\s*\d{4}\s*/i, '').trim(), score });
@@ -160,16 +187,19 @@ function extractCompany(lines) {
 function extractPersonName(lines, emails, company) {
   const companyLower = (company || '').toLowerCase();
   for (const line of lines) {
-    const clean = stripScripts(line);
+    const clean = normalizeLine(line);
     if (clean.length < 3 || clean.length > 36) continue;
     if (NOISE_LINE.test(clean)) continue;
     if (clean.match(EMAIL_REGEX) || clean.match(INDIAN_PHONE_REGEX) || clean.match(WEBSITE_REGEX)) continue;
-    if (COMPANY_SUFFIXES.test(clean) || clean === clean.toUpperCase()) continue;
+    if (COMPANY_SUFFIXES.test(clean) || COMPANY_SUFFIXES_INDIC.test(clean)) continue;
+    // "ALL CAPS = company shouting its name" only applies to cased (Latin)
+    // text — Tamil/Devanagari have no case, so this must not fire for them.
+    if (!INDIC_SCRIPT_REGEX.test(clean) && clean === clean.toUpperCase()) continue;
     if (DESIGNATION_WORDS.test(clean)) continue;
     if (PRODUCT_WORDS.test(clean)) continue;
-    if (PINCODE_REGEX.test(clean) || /\b(nagar|road|street|address)\b/i.test(clean)) continue;
+    if (PINCODE_REGEX.test(clean) || ADDRESS_WORDS.test(clean)) continue;
     if (companyLower && companyLower.includes(clean.toLowerCase())) continue;
-    if (!/^[A-Za-z][A-Za-z.'\s-]*$/.test(clean)) continue;
+    if (!NAME_CHARS_REGEX.test(clean)) continue;
     const words = clean.split(/\s+/).filter(Boolean);
     if (words.length < 1 || words.length > 3) continue;
     // Reject single short tokens that look like OCR noise ("Test", "Lipi", "Ltd")
@@ -202,7 +232,7 @@ function extractPersonName(lines, emails, company) {
 
 function extractDesignation(lines) {
   for (const line of lines) {
-    const clean = stripScripts(line);
+    const clean = normalizeLine(line);
     if (clean.length > 40) continue;
     const m = clean.match(DESIGNATION_WORDS);
     if (!m) continue;
@@ -395,10 +425,15 @@ export async function preprocessImageForOcr(imageSource) {
   });
 }
 
+// English + Tamil + Hindi, recognized together — CardFlow markets multi-script
+// support, and cards commonly mix an English/Latin phone number or designation
+// with a Tamil or Hindi company/person name on the same line.
+const OCR_LANGUAGES = 'eng+tam+hin';
+
 export async function extractCardWithTesseract(imageSource) {
   try {
     const processed = await preprocessImageForOcr(imageSource);
-    const result = await Tesseract.recognize(processed, 'eng', {
+    const result = await Tesseract.recognize(processed, OCR_LANGUAGES, {
       logger: (m) => {
         if (m.status === 'recognizing text') {
           console.log(`[OCR] ${(m.progress * 100).toFixed(0)}%`);
