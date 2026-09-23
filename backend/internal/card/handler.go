@@ -248,5 +248,54 @@ func (h *CardHandler) UpdateCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value(middleware.UserContextKey).(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+	cardID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid card id", err.Error())
+		return
+	}
+	if err := h.svc.DeleteSavedCard(r.Context(), user.ID, cardID); err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", err.Error(), nil)
+		return
+	}
 	response.JSON(w, http.StatusOK, map[string]string{"message": "card deleted"})
+}
+
+// PublicGetCard serves a saved card's shareable fields with no auth
+// required — this is what a "/share/{id}" link in the app resolves to.
+func (h *CardHandler) PublicGetCard(w http.ResponseWriter, r *http.Request) {
+	cardID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid card id", err.Error())
+		return
+	}
+	card, err := h.svc.GetPublicCard(r.Context(), cardID)
+	if err != nil {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "this shared card link is no longer available", nil)
+		return
+	}
+	response.JSON(w, http.StatusOK, card)
+}
+
+// PublicGetOriginalImage serves a shared card's original image with no auth
+// required, so the recipient of a share link can see the physical card.
+func (h *CardHandler) PublicGetOriginalImage(w http.ResponseWriter, r *http.Request) {
+	cardID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.BadRequest(w, "invalid card id", err.Error())
+		return
+	}
+	data, contentType, err := h.svc.GetOriginalImage(r.Context(), uuid.Nil, cardID, r.URL.Query().Get("side"))
+	if err != nil || len(data) == 0 {
+		response.Error(w, http.StatusNotFound, "NOT_FOUND", "original card image not found", nil)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }

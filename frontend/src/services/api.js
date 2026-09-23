@@ -57,6 +57,22 @@ export function cardOriginalImagePath(cardId, side = 'front') {
   return `/api/v1/cards/${cardId}/original-image${qs}`;
 }
 
+/** Fetch a shared card's original image with no auth — used by the public share-link view */
+export async function fetchPublicCardImageUrl(cardId, side = 'front') {
+  if (!cardId) return null;
+  const qs = side && side !== 'front' ? `?side=${side}` : '';
+  const url = resolveApiUrl(`/api/v1/public/cards/${cardId}/original-image${qs}`);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    console.warn('Could not load shared card image', e);
+    return null;
+  }
+}
+
 // Normalizes 10-digit or raw numbers to E.164 (+91...)
 const formatE164 = (raw) => {
   if (!raw) return '';
@@ -355,6 +371,25 @@ export const apiClient = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data?.error?.message || 'Could not update card');
+    return data.data || data;
+  },
+
+  // Removes a saved card from the vault (soft delete) — used both for
+  // deleting a scanned card and for "unsaving" a business.
+  async deleteCard(cardId, token = '') {
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/cards/${cardId}`, { method: 'DELETE', headers });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not remove card');
+    return data.data || data;
+  },
+
+  // Loads a shared card's public fields — no auth, used by the "/share/{id}" link view.
+  async getPublicCard(cardId) {
+    const res = await fetch(`${API_BASE_URL}/public/cards/${cardId}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'This shared card link is no longer available.');
     return data.data || data;
   },
 

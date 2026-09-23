@@ -449,9 +449,17 @@ export function AuthProvider({ children }) {
     syncAuthNotifications(authState);
   }, [authReady, user, token, isPremiumActive]);
 
-  // Helper to check if a business is already saved in this user's vault
+  // Helper to check if a business is already saved in this user's vault.
+  // GSTIN is checked first since it's the one field that's actually unique
+  // per business — the name/phone fuzzy-match is only a fallback for
+  // businesses that have no GSTIN on file yet.
   const isBusinessSaved = useCallback((biz) => {
     if (!biz || !savedCards || savedCards.length === 0) return false;
+    const bGstin = (biz.gstin || '').toUpperCase().trim();
+    if (bGstin) {
+      const gstinMatch = savedCards.some((card) => (card.gstin || '').toUpperCase().trim() === bGstin);
+      if (gstinMatch) return true;
+    }
     const bName = (biz.name || '').toLowerCase().trim();
     const bPhone = (biz.phone || '').replace(/\D/g, '');
 
@@ -464,6 +472,26 @@ export function AuthProvider({ children }) {
     });
   }, [savedCards]);
 
+  // Finds the saved-card entry that corresponds to a given business, using
+  // the same GSTIN-first / fuzzy-fallback matching as isBusinessSaved.
+  const findSavedCardForBusiness = useCallback((biz) => {
+    if (!biz || !savedCards || savedCards.length === 0) return null;
+    const bGstin = (biz.gstin || '').toUpperCase().trim();
+    if (bGstin) {
+      const byGstin = savedCards.find((card) => (card.gstin || '').toUpperCase().trim() === bGstin);
+      if (byGstin) return byGstin;
+    }
+    const bName = (biz.name || '').toLowerCase().trim();
+    const bPhone = (biz.phone || '').replace(/\D/g, '');
+    return savedCards.find((card) => {
+      const cCompany = (card.company || card.person_name || '').toLowerCase().trim();
+      const cPhone = (card.phones?.[0]?.raw || card.phones?.[0]?.e164 || '').replace(/\D/g, '');
+      if (bName && cCompany && (cCompany.includes(bName) || bName.includes(cCompany))) return true;
+      if (bPhone && cPhone && (cPhone.includes(bPhone) || bPhone.includes(cPhone))) return true;
+      return false;
+    }) || null;
+  }, [savedCards]);
+
   // Save a business card directly from discovery into user vault
   const saveBusinessToVault = async (biz) => {
     if (!biz || !token) return;
@@ -474,12 +502,65 @@ export function AuthProvider({ children }) {
       website: `https://cardflow.app/b/${biz.slug || ''}`,
       notes: `Saved from Discover Businesses (${biz.category || ''})`,
       met_context: 'Discover Directory',
+      source: 'BUSINESS_PROFILE',
+      gstin: biz.gstin || '',
       phones: biz.phone ? [{ raw: biz.phone, e164: biz.phone.replace(/[^0-9+]/g, ''), type: 'work', is_whatsapp: true }] : [],
       emails: biz.email ? [biz.email] : [],
       raw_address: biz.address || 'Coimbatore, Tamil Nadu',
       tags: [biz.category || 'Verified Business', 'Directory Lead']
     };
 
+    const saved = await apiClient.saveCard(payload, token);
+    await loadUserVault(token);
+    return saved;
+  };
+
+  // Un-saves a previously-saved business (toggling the Save button back off).
+  const unsaveBusinessFromVault = async (biz) => {
+    if (!biz || !token) return;
+    const existing = findSavedCardForBusiness(biz);
+    if (!existing?.id) return;
+    await apiClient.deleteCard(existing.id, token);
+    await loadUserVault(token);
+  };
+
+  // Whether a shared card (opened via a "/share/{id}" link) is already in
+  // this user's vault — GSTIN-first, same priority as isBusinessSaved.
+  const isSharedCardSaved = useCallback((sharedCard) => {
+    if (!sharedCard || !savedCards || savedCards.length === 0) return false;
+    const sGstin = (sharedCard.gstin || '').toUpperCase().trim();
+    if (sGstin) {
+      if (savedCards.some((card) => (card.gstin || '').toUpperCase().trim() === sGstin)) return true;
+    }
+    const sName = (sharedCard.person_name || sharedCard.company || '').toLowerCase().trim();
+    const sPhone = (sharedCard.phones?.[0]?.raw || sharedCard.phones?.[0]?.e164 || '').replace(/\D/g, '');
+    return savedCards.some((card) => {
+      const cCompany = (card.company || card.person_name || '').toLowerCase().trim();
+      const cPhone = (card.phones?.[0]?.raw || card.phones?.[0]?.e164 || '').replace(/\D/g, '');
+      if (sName && cCompany && (cCompany.includes(sName) || sName.includes(cCompany))) return true;
+      if (sPhone && cPhone && (cPhone.includes(sPhone) || sPhone.includes(cPhone))) return true;
+      return false;
+    });
+  }, [savedCards]);
+
+  // Saves a card someone shared via a "/share/{id}" link into this user's
+  // own vault. The backend's GSTIN dedup (in CreateSavedCard) still applies,
+  // so this links to the same business record if one already matches.
+  const saveSharedCardToVault = async (sharedCard) => {
+    if (!sharedCard || !token) return;
+    const payload = {
+      person_name: sharedCard.person_name || '',
+      designation: sharedCard.designation || '',
+      company: sharedCard.company || '',
+      website: sharedCard.website || '',
+      notes: '',
+      met_context: 'Received via shared card link',
+      source: 'SCANNED',
+      gstin: sharedCard.gstin || '',
+      phones: sharedCard.phones || [],
+      emails: sharedCard.emails || [],
+      raw_address: sharedCard.raw_address || ''
+    };
     const saved = await apiClient.saveCard(payload, token);
     await loadUserVault(token);
     return saved;
@@ -550,6 +631,9 @@ export function AuthProvider({ children }) {
         myBusinesses,
         isBusinessSaved,
         saveBusinessToVault,
+        unsaveBusinessFromVault,
+        isSharedCardSaved,
+        saveSharedCardToVault,
         loadUserVault,
         loadMyBusinesses,
         addMyBusiness,

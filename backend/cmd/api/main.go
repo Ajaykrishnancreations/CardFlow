@@ -165,6 +165,9 @@ func main() {
 		r.Get("/businesses/{id}", discoveryHandler.GetBusiness)
 		r.Get("/businesses/slug/{slug}", discoveryHandler.GetBusinessBySlug)
 		r.Post("/cards/scan", cardHandler.ScanCard)
+		// Shareable card link — recipient may not have an account yet.
+		r.Get("/public/cards/{id}", cardHandler.PublicGetCard)
+		r.Get("/public/cards/{id}/original-image", cardHandler.PublicGetOriginalImage)
 		// Razorpay calls this directly (no user JWT) — authenticated by its own signature check.
 		r.Post("/billing/webhook", billingHandler.Webhook)
 

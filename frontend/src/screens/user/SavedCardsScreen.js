@@ -7,7 +7,8 @@ import {
   CloudDownload,
   RefreshCw,
   ChevronRight,
-  Contact
+  Contact,
+  BookmarkCheck
 } from 'lucide-react';
 import { colors, radii, spacing, typography } from '../../theme';
 import { EmptyState } from '../../components/EmptyState';
@@ -346,6 +347,12 @@ export function SavedCardsScreen({ onScanNewCard, onSelectCard }) {
                   ) : null}
                   {card.gstin ? <Text style={styles.bizCardGst}>GST {card.gstin}</Text> : null}
                 </View>
+                {card.source === 'BUSINESS_PROFILE' ? (
+                  <View style={styles.savedChip}>
+                    <BookmarkCheck size={12} color="#059669" style={{ marginRight: 4 }} />
+                    <Text style={styles.savedChipText}>SAVED</Text>
+                  </View>
+                ) : null}
                 <ChevronRight size={16} color={colors.textMuted} />
               </TouchableOpacity>
             ))}
@@ -472,5 +479,22 @@ const styles = StyleSheet.create({
   bizCardCompany: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   bizCardRole: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
   bizCardText: { fontSize: 11, color: colors.textMuted, marginTop: 4 },
-  bizCardGst: { fontSize: 11, fontWeight: '600', color: colors.gold, marginTop: 4 }
+  bizCardGst: { fontSize: 11, fontWeight: '600', color: colors.gold, marginTop: 4 },
+  savedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    borderColor: '#A7F3D0',
+    borderWidth: 1,
+    borderRadius: radii.full,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginRight: spacing.sm
+  },
+  savedChipText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#065F46',
+    letterSpacing: 0.5
+  }
 });

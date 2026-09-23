@@ -18,11 +18,11 @@ import (
 )
 
 type CardService struct {
-	db          *database.DB
-	s3          *storage.S3Service
-	extractor   *extractor.GeminiService
-	vaultMutex  sync.RWMutex
-	memoryVault map[uuid.UUID][]domain.SavedCard
+	db           *database.DB
+	s3           *storage.S3Service
+	extractor    *extractor.GeminiService
+	vaultMutex   sync.RWMutex
+	memoryVault  map[uuid.UUID][]domain.SavedCard
 	imageMutex   sync.RWMutex
 	memoryImages map[string][]byte
 }
@@ -59,7 +59,7 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 			SELECT id, user_id, COALESCE(person_name, ''), COALESCE(designation, ''), COALESCE(company, ''),
 			       COALESCE(website, ''), COALESCE(notes, ''), COALESCE(met_context, ''), COALESCE(private_rating, 5),
 			       COALESCE(contact_type::text, 'business'), COALESCE(extract_status::text, 'extracted'),
-			       COALESCE(gstin, ''), created_at, updated_at
+			       COALESCE(gstin, ''), COALESCE(source, 'SCANNED'), linked_business_id, created_at, updated_at
 			FROM saved_cards
 			WHERE user_id = $1 AND deleted_at IS NULL
 			ORDER BY created_at DESC
@@ -70,19 +70,22 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 	defer rows.Close()
 	for rows.Next() {
 		var c domain.SavedCard
-		var contactType, extractStatus, website, gstinVal string
+		var contactType, extractStatus, website, gstinVal, sourceVal string
 		var rating int16
+		var linkedBusinessID *uuid.UUID
 
 		scanErr := rows.Scan(
 			&c.ID, &c.UserID, &c.PersonName, &c.Designation, &c.Company,
 			&website, &c.Notes, &c.MetContext, &rating, &contactType,
-			&extractStatus, &gstinVal, &c.CreatedAt, &c.UpdatedAt,
+			&extractStatus, &gstinVal, &sourceVal, &linkedBusinessID, &c.CreatedAt, &c.UpdatedAt,
 		)
 		if scanErr == nil {
 			if website != "" {
 				c.Website = &website
 			}
 			c.GSTIN = gstinVal
+			c.Source = sourceVal
+			c.LinkedBusinessID = linkedBusinessID
 			rInt := int(rating)
 			c.PrivateRating = &rInt
 			c.ContactType = contactType
@@ -149,6 +152,11 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 				if imgKey != "" {
 					c.FrontImageKey = &imgKey
 				}
+			} else if linkedBusinessID != nil && s.businessHasImage(ctx, *linkedBusinessID, "front") {
+				// No image of its own — this card was GSTIN-linked to an
+				// existing business, so fall back to that business's image
+				// instead of asking the user to upload a duplicate.
+				c.OriginalCardImageURL = originalImageAPIPath(c.ID.String(), "front")
 			}
 
 			var backKey string
@@ -165,6 +173,8 @@ func (s *CardService) GetSavedCards(ctx context.Context, userID uuid.UUID) ([]do
 				if backKey != "" {
 					c.BackImageKey = &backKey
 				}
+			} else if linkedBusinessID != nil && s.businessHasImage(ctx, *linkedBusinessID, "back") {
+				c.OriginalBackImageURL = originalImageAPIPath(c.ID.String(), "back")
 			}
 
 			// Parse GSTIN from notes if embedded
@@ -200,6 +210,9 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 	if card.ContactType == "" {
 		card.ContactType = "business"
 	}
+	if card.Source == "" {
+		card.Source = "SCANNED"
+	}
 
 	notesToStore := card.Notes
 	if card.GSTIN != "" {
@@ -216,6 +229,25 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 		card.OriginalCardImageURL = ""
 	}
 
+	// If the GSTIN matches an already-registered business, link this card to
+	// it instead of letting every scanner of the same physical card create
+	// their own independent copy of the business's data and images —
+	// GSTIN is the one field that's genuinely unique per business.
+	if card.GSTIN != "" {
+		var businessID uuid.UUID
+		err := s.db.Pool.QueryRow(ctx, `
+				SELECT id FROM businesses WHERE UPPER(gstin) = UPPER($1) AND deleted_at IS NULL LIMIT 1
+			`, card.GSTIN).Scan(&businessID)
+		if err == nil {
+			card.LinkedBusinessID = &businessID
+			// The business already owns the canonical images — don't also
+			// store this saver's copy (it's the same card, and images are
+			// the single biggest thing bloating this table).
+			pendingImage = nil
+			pendingContentType = ""
+		}
+	}
+
 	// Ensure user exists in users table to satisfy foreign key
 	_, _ = s.db.Pool.Exec(ctx, `
 			INSERT INTO users (id, phone, name, city, state, country, role, plan, status, free_scans_remaining)
@@ -226,8 +258,8 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 	_, err := s.db.Pool.Exec(ctx, `
 			INSERT INTO saved_cards (
 				id, user_id, person_name, designation, company, website,
-				notes, met_context, contact_type, extract_status, gstin, source
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'business', 'extracted', NULLIF($9, ''), 'SCANNED')
+				notes, met_context, contact_type, extract_status, gstin, source, linked_business_id
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'business', 'extracted', NULLIF($9, ''), $10, $11)
 			ON CONFLICT (id) DO UPDATE SET
 				person_name = EXCLUDED.person_name,
 				company = EXCLUDED.company,
@@ -235,7 +267,7 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 				website = EXCLUDED.website,
 				notes = EXCLUDED.notes,
 				gstin = EXCLUDED.gstin
-		`, card.ID, userID, card.PersonName, card.Designation, card.Company, card.Website, notesToStore, card.MetContext, card.GSTIN)
+		`, card.ID, userID, card.PersonName, card.Designation, card.Company, card.Website, notesToStore, card.MetContext, card.GSTIN, card.Source, card.LinkedBusinessID)
 	if err != nil {
 		return nil, fmt.Errorf("save card: %w", err)
 	}
@@ -286,6 +318,8 @@ func (s *CardService) CreateSavedCard(ctx context.Context, userID uuid.UUID, car
 	}
 
 	if s.hasOriginalImage(card.ID, "front") {
+		card.OriginalCardImageURL = originalImageAPIPath(card.ID.String(), "front")
+	} else if card.LinkedBusinessID != nil && s.businessHasImage(ctx, *card.LinkedBusinessID, "front") {
 		card.OriginalCardImageURL = originalImageAPIPath(card.ID.String(), "front")
 	}
 
@@ -406,7 +440,44 @@ func (s *CardService) GetOriginalImage(ctx context.Context, userID, cardID uuid.
 		return data, "image/jpeg", nil
 	}
 
+	// This card has no image of its own — if it was GSTIN-linked to an
+	// existing registered business, serve that business's card image
+	// instead of storing (and re-storing, per saver) a duplicate copy.
+	if s.dbReady() {
+		var linkedBusinessID *uuid.UUID
+		_ = s.db.Pool.QueryRow(ctx, `SELECT linked_business_id FROM saved_cards WHERE id = $1`, cardID).Scan(&linkedBusinessID)
+		if linkedBusinessID != nil {
+			var imageData []byte
+			var contentType string
+			err := s.db.Pool.QueryRow(ctx, `
+				SELECT image_data, COALESCE(NULLIF(content_type, ''), 'image/jpeg')
+				FROM business_card_images
+				WHERE business_id = $1 AND side = $2
+			`, *linkedBusinessID, side).Scan(&imageData, &contentType)
+			if err == nil && len(imageData) > 0 {
+				return imageData, contentType, nil
+			}
+		}
+	}
+
 	return nil, "", fmt.Errorf("image not found")
+}
+
+// businessHasImage reports whether a registered business has a stored card
+// image for the given side, used to decide whether a GSTIN-linked saved
+// card can fall back to it instead of its own (absent) image.
+func (s *CardService) businessHasImage(ctx context.Context, businessID uuid.UUID, side string) bool {
+	if !s.dbReady() {
+		return false
+	}
+	var exists bool
+	_ = s.db.Pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM business_card_images
+			WHERE business_id = $1 AND side = $2 AND image_data IS NOT NULL AND length(image_data) > 0
+		)
+	`, businessID, side).Scan(&exists)
+	return exists
 }
 
 func (s *CardService) UpdateSavedCard(ctx context.Context, userID, cardID uuid.UUID, patch domain.SavedCard) (*domain.SavedCard, error) {
@@ -483,6 +554,111 @@ func (s *CardService) CardBelongsToUser(ctx context.Context, userID, cardID uuid
 			SELECT user_id FROM saved_cards WHERE id = $1 AND deleted_at IS NULL
 		`, cardID).Scan(&owner)
 	return err == nil && owner == userID
+}
+
+// DeleteSavedCard soft-deletes a card the caller owns — used both for
+// removing a scanned card and for "unsaving" a business from the vault.
+func (s *CardService) DeleteSavedCard(ctx context.Context, userID, cardID uuid.UUID) error {
+	if err := s.requireDB(); err != nil {
+		return err
+	}
+	tag, err := s.db.Pool.Exec(ctx, `
+			UPDATE saved_cards SET deleted_at = NOW(), updated_at = NOW()
+			WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+		`, cardID, userID)
+	if err != nil {
+		return fmt.Errorf("delete card: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("card not found")
+	}
+	return nil
+}
+
+// GetPublicCard loads a single saved card for the unauthenticated share-link
+// view — no user_id check, since the whole point is that someone without an
+// account (or a different account) can open the link. Only the fields safe
+// to show a stranger are populated.
+func (s *CardService) GetPublicCard(ctx context.Context, cardID uuid.UUID) (*domain.SavedCard, error) {
+	if err := s.requireDB(); err != nil {
+		return nil, err
+	}
+
+	var c domain.SavedCard
+	var website, gstinVal string
+	var linkedBusinessID *uuid.UUID
+	err := s.db.Pool.QueryRow(ctx, `
+			SELECT id, COALESCE(person_name, ''), COALESCE(designation, ''), COALESCE(company, ''),
+			       COALESCE(website, ''), COALESCE(gstin, ''), linked_business_id, created_at
+			FROM saved_cards
+			WHERE id = $1 AND deleted_at IS NULL
+		`, cardID).Scan(&c.ID, &c.PersonName, &c.Designation, &c.Company, &website, &gstinVal, &linkedBusinessID, &c.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("card not found")
+	}
+	if website != "" {
+		c.Website = &website
+	}
+	c.GSTIN = gstinVal
+	c.LinkedBusinessID = linkedBusinessID
+
+	pRows, pErr := s.db.Pool.Query(ctx, `SELECT raw_phone, phone_e164, phone_type, is_whatsapp FROM saved_card_phones WHERE saved_card_id = $1`, c.ID)
+	if pErr == nil {
+		for pRows.Next() {
+			var raw, e164, pType string
+			var isWA bool
+			if pRows.Scan(&raw, &e164, &pType, &isWA) == nil {
+				c.Phones = append(c.Phones, domain.CardPhone{Raw: raw, E164: e164, Type: pType, IsWhatsApp: isWA})
+			}
+		}
+		pRows.Close()
+	}
+
+	eRows, eErr := s.db.Pool.Query(ctx, `SELECT email FROM saved_card_emails WHERE saved_card_id = $1`, c.ID)
+	if eErr == nil {
+		for eRows.Next() {
+			var em string
+			if eRows.Scan(&em) == nil {
+				c.Emails = append(c.Emails, em)
+			}
+		}
+		eRows.Close()
+	}
+
+	var rawAddr string
+	_ = s.db.Pool.QueryRow(ctx, `SELECT raw_address FROM saved_card_addresses WHERE saved_card_id = $1`, c.ID).Scan(&rawAddr)
+	c.RawAddress = rawAddr
+
+	var imgKey string
+	var hasImageData bool
+	_ = s.db.Pool.QueryRow(ctx, `
+			SELECT object_key, (image_data IS NOT NULL AND length(image_data) > 0)
+			FROM saved_card_images WHERE saved_card_id = $1 AND side = 'front' ORDER BY created_at DESC LIMIT 1
+		`, c.ID).Scan(&imgKey, &hasImageData)
+	if imgKey != "" || hasImageData {
+		c.OriginalCardImageURL = originalImageAPIPath(c.ID.String(), "front")
+	} else if linkedBusinessID != nil && s.businessHasImage(ctx, *linkedBusinessID, "front") {
+		c.OriginalCardImageURL = originalImageAPIPath(c.ID.String(), "front")
+	}
+
+	var backKey string
+	var hasBack bool
+	_ = s.db.Pool.QueryRow(ctx, `
+			SELECT object_key, (image_data IS NOT NULL AND length(image_data) > 0)
+			FROM saved_card_images WHERE saved_card_id = $1 AND side = 'back' ORDER BY created_at DESC LIMIT 1
+		`, c.ID).Scan(&backKey, &hasBack)
+	if backKey != "" || hasBack {
+		c.OriginalBackImageURL = originalImageAPIPath(c.ID.String(), "back")
+	} else if linkedBusinessID != nil && s.businessHasImage(ctx, *linkedBusinessID, "back") {
+		c.OriginalBackImageURL = originalImageAPIPath(c.ID.String(), "back")
+	}
+
+	if c.Notes != "" && len(c.Notes) > 7 && c.Notes[:7] == "__GST__" {
+		parts := strings.SplitN(c.Notes, "\n", 2)
+		c.GSTIN = strings.TrimPrefix(parts[0], "__GST__:")
+	}
+
+	return &c, nil
 }
 
 func (s *CardService) ProcessOCR(ctx context.Context, userID uuid.UUID, imageKey string) (*extractor.ExtractedCardData, error) {

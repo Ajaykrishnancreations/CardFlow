@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
 import { Search, SlidersHorizontal, Building2, Phone, MessageSquare, Navigation, Check, BookmarkCheck, BookmarkPlus } from 'lucide-react';
 import { colors, radii, spacing, typography, shadows } from '../../theme';
 import { Card } from '../../components/Card';
@@ -7,12 +7,33 @@ import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
 import { EmptyState } from '../../components/EmptyState';
 import { BrandSpinner, SkeletonCard } from '../../components/Loader';
+import { Snackbar } from '../../components/Snackbar';
 import { categories as fallbackCategories } from '../../data/mockData';
 import { useAuth } from '../../context/AuthContext';
 import { apiClient } from '../../services/api';
 
 export function SearchScreen({ onSelectBusiness, initialCategoryId, onBack }) {
-  const { isBusinessSaved, saveBusinessToVault } = useAuth();
+  const { isBusinessSaved, saveBusinessToVault, unsaveBusinessFromVault } = useAuth();
+  const [savingBizId, setSavingBizId] = useState(null);
+  const [snackbar, setSnackbar] = useState({ visible: false, message: '', type: 'success' });
+  const showSnackbar = (message, type = 'success') => setSnackbar({ visible: true, message, type });
+
+  const handleToggleSave = async (biz, isSaved) => {
+    setSavingBizId(biz.id);
+    try {
+      if (isSaved) {
+        await unsaveBusinessFromVault(biz);
+        showSnackbar(`Removed ${biz.name || 'business'} from My Cards.`);
+      } else {
+        await saveBusinessToVault(biz);
+        showSnackbar(`Saved ${biz.name || 'business'} to My Cards.`);
+      }
+    } catch (e) {
+      showSnackbar(e?.message || "Couldn't update this business.", 'error');
+    } finally {
+      setSavingBizId(null);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCat, setSelectedCat] = useState(initialCategoryId || 'all');
   const [selectedRadius, setSelectedRadius] = useState(10); // km
@@ -249,17 +270,18 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId, onBack }) {
                     <Text style={[styles.btnActionText, { color: colors.textSecondary }]}>Directions</Text>
                   </TouchableOpacity>
 
-                  {/* 1-Tap Save to Vault Button */}
+                  {/* 1-Tap Save to Vault Button — tap again to unsave */}
                   <TouchableOpacity
                     style={[styles.btnAction, isSaved ? styles.btnActionSaved : styles.btnActionSave]}
-                    onPress={async (e) => {
+                    disabled={savingBizId === biz.id}
+                    onPress={(e) => {
                       e.stopPropagation();
-                      if (!isSaved) {
-                        await saveBusinessToVault(biz);
-                      }
+                      handleToggleSave(biz, isSaved);
                     }}
                   >
-                    {isSaved ? (
+                    {savingBizId === biz.id ? (
+                      <ActivityIndicator size="small" color={isSaved ? '#059669' : colors.primary} />
+                    ) : isSaved ? (
                       <>
                         <BookmarkCheck size={14} color="#059669" />
                         <Text style={[styles.btnActionText, { color: '#059669', fontWeight: '700' }]}>Saved</Text>
@@ -277,6 +299,12 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId, onBack }) {
           })
         )}
       </ScrollView>
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar((s) => ({ ...s, visible: false }))}
+      />
     </View>
   );
 }

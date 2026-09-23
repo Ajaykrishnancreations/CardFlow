@@ -16,6 +16,7 @@ import { SearchScreen } from '../screens/user/SearchScreen';
 import { BusinessDetailsScreen } from '../screens/user/BusinessDetailsScreen';
 import { SavedCardsScreen } from '../screens/user/SavedCardsScreen';
 import { SavedCardDetailScreen } from '../screens/user/SavedCardDetailScreen';
+import { SharedCardScreen } from '../screens/user/SharedCardScreen';
 import { ScanCardScreen } from '../screens/user/ScanCardScreen';
 import { ProfileScreen } from '../screens/user/ProfileScreen';
 import { SubscriptionScreen } from '../components/SubscriptionScreen';
@@ -105,9 +106,19 @@ export function AppNavigator() {
   const [supportView, setSupportView] = useState('hub');
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [sharedCardId, setSharedCardId] = useState(null);
 
   const scanOriginRef = useRef(HOME_TAB);
   const profileOriginRef = useRef(HOME_TAB);
+
+  // A "/share/{id}" link opens straight into the shared card, whether or
+  // not the visitor is logged in yet — this check runs before the normal
+  // auth/tab routing below so it takes priority over both.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const m = window.location.pathname.match(/^\/share\/([a-zA-Z0-9-]+)/);
+    if (m) setSharedCardId(m[1]);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -182,6 +193,20 @@ export function AppNavigator() {
     const target = scanOriginRef.current || HOME_TAB;
     setCurrentTab(target === 'user_scan' ? HOME_TAB : target);
   }, []);
+
+  if (sharedCardId) {
+    return (
+      <Layout>
+        <SharedCardScreen
+          cardId={sharedCardId}
+          onDone={() => {
+            setSharedCardId(null);
+            window.history.replaceState(null, '', '/');
+          }}
+        />
+      </Layout>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -360,6 +385,7 @@ export function AppNavigator() {
               onBack={() => setSelectedCard(null)}
               onHome={goHome}
               onUpdated={(next) => setSelectedCard(next)}
+              onDeleted={() => setSelectedCard(null)}
             />
           </View>
         ) : null}

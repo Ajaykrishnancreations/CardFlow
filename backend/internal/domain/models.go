@@ -57,15 +57,15 @@ func (u *User) IsPremiumActive() bool {
 }
 
 type UserKYC struct {
-	UserID             uuid.UUID `json:"user_id"`
-	AadhaarStatus      string    `json:"aadhaar_status"`
-	AadhaarLast4       *string   `json:"aadhaar_last4,omitempty"`
-	AadhaarProviderRef *string   `json:"aadhaar_provider_ref,omitempty"`
-	PANMasked          *string   `json:"pan_masked,omitempty"`
-	PANStatus          string    `json:"pan_status"`
-	RegistryName       *string   `json:"registry_name,omitempty"`
-	NameMatchScore     *float64  `json:"name_match_score,omitempty"`
-	Provider           string    `json:"provider"`
+	UserID             uuid.UUID  `json:"user_id"`
+	AadhaarStatus      string     `json:"aadhaar_status"`
+	AadhaarLast4       *string    `json:"aadhaar_last4,omitempty"`
+	AadhaarProviderRef *string    `json:"aadhaar_provider_ref,omitempty"`
+	PANMasked          *string    `json:"pan_masked,omitempty"`
+	PANStatus          string     `json:"pan_status"`
+	RegistryName       *string    `json:"registry_name,omitempty"`
+	NameMatchScore     *float64   `json:"name_match_score,omitempty"`
+	Provider           string     `json:"provider"`
 	VerifiedAt         *time.Time `json:"verified_at,omitempty"`
 }
 
@@ -137,40 +137,47 @@ type DigitalCard struct {
 }
 
 type SavedCard struct {
-	ID             uuid.UUID  `json:"id"`
-	UserID         uuid.UUID  `json:"user_id"`
-	PersonName     string     `json:"person_name"`
-	Designation    string     `json:"designation"`
-	Company        string     `json:"company"`
-	Website        *string    `json:"website,omitempty"`
-	Notes          string     `json:"notes"`
-	MetContext     string     `json:"met_context"`
-	PrivateRating  *int       `json:"private_rating,omitempty"`
-	ContactType    string     `json:"contact_type"`
-	ExtractStatus  string     `json:"extract_status"`
-	RawAddress     string     `json:"raw_address,omitempty"`
-	StructuredAddr *string    `json:"structured_address,omitempty"`
-	Tags           []string   `json:"tags,omitempty"`
-	Phones         []CardPhone `json:"phones,omitempty"`
-	Emails         []string   `json:"emails,omitempty"`
-	FrontImageKey          *string    `json:"front_image_key,omitempty"`
-	BackImageKey           *string    `json:"back_image_key,omitempty"`
-	OriginalCardImageURL   string     `json:"original_card_image_url,omitempty"`
-	OriginalBackImageURL   string     `json:"original_back_image_url,omitempty"`
-	GSTIN                  string     `json:"gstin,omitempty"`
-	Latitude               *float64   `json:"latitude,omitempty"`
-	Longitude              *float64   `json:"longitude,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID                   uuid.UUID   `json:"id"`
+	UserID               uuid.UUID   `json:"user_id"`
+	PersonName           string      `json:"person_name"`
+	Designation          string      `json:"designation"`
+	Company              string      `json:"company"`
+	Website              *string     `json:"website,omitempty"`
+	Notes                string      `json:"notes"`
+	MetContext           string      `json:"met_context"`
+	PrivateRating        *int        `json:"private_rating,omitempty"`
+	ContactType          string      `json:"contact_type"`
+	ExtractStatus        string      `json:"extract_status"`
+	RawAddress           string      `json:"raw_address,omitempty"`
+	StructuredAddr       *string     `json:"structured_address,omitempty"`
+	Tags                 []string    `json:"tags,omitempty"`
+	Phones               []CardPhone `json:"phones,omitempty"`
+	Emails               []string    `json:"emails,omitempty"`
+	FrontImageKey        *string     `json:"front_image_key,omitempty"`
+	BackImageKey         *string     `json:"back_image_key,omitempty"`
+	OriginalCardImageURL string      `json:"original_card_image_url,omitempty"`
+	OriginalBackImageURL string      `json:"original_back_image_url,omitempty"`
+	GSTIN                string      `json:"gstin,omitempty"`
+	Latitude             *float64    `json:"latitude,omitempty"`
+	Longitude            *float64    `json:"longitude,omitempty"`
+	// Source distinguishes how this card entered the vault: 'SCANNED' (OCR'd a
+	// physical card) or 'BUSINESS_PROFILE' (saved from Browse/Discover).
+	Source string `json:"source,omitempty"`
+	// LinkedBusinessID is set when this card's GSTIN matches an existing
+	// registered business — the card then shares that business's data/images
+	// instead of storing its own duplicate copy.
+	LinkedBusinessID *uuid.UUID `json:"linked_business_id,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 type CardPhone struct {
-	Raw         string  `json:"raw"`
-	E164        string  `json:"e164"`
-	Type        string  `json:"type"`
-	Usage       string  `json:"usage"`
-	IsWhatsApp  bool    `json:"is_whatsapp"`
-	Confidence  float64 `json:"confidence"`
+	Raw        string  `json:"raw"`
+	E164       string  `json:"e164"`
+	Type       string  `json:"type"`
+	Usage      string  `json:"usage"`
+	IsWhatsApp bool    `json:"is_whatsapp"`
+	Confidence float64 `json:"confidence"`
 }
 
 type Enquiry struct {

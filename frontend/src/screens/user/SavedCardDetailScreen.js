@@ -10,7 +10,8 @@ import {
   Image as ImageIcon,
   Pencil,
   ShieldCheck,
-  Building2
+  Building2,
+  Trash2
 } from 'lucide-react';
 import { colors, radii, spacing } from '../../theme';
 import { Card } from '../../components/Card';
@@ -18,6 +19,8 @@ import { Button } from '../../components/Button';
 import { Input } from '../../components/Input';
 import { DetailScreenHeader } from '../../components/DetailScreenHeader';
 import { CardViewToggle } from '../../components/CardViewToggle';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { Snackbar } from '../../components/Snackbar';
 import { useAuth } from '../../context/AuthContext';
 import { fetchCardOriginalImageUrl, cardOriginalImagePath, apiClient } from '../../services/api';
 import { buildVCard, downloadTextFile } from '../../utils/vcard';
@@ -32,7 +35,7 @@ function whatsappNumber(card, phone) {
   return (wa?.raw || wa?.e164 || phone || '').replace(/[^0-9]/g, '');
 }
 
-export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
+export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated, onDeleted }) {
   const { token, loadUserVault } = useAuth();
   const [viewMode, setViewMode] = useState('digital');
   const [originalSide, setOriginalSide] = useState('front');
@@ -44,6 +47,9 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
   const [saving, setSaving] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
   const [liveCard, setLiveCard] = useState(card);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [snackbar, setSnackbar] = useState({ visible: false, message: '', type: 'success' });
   const fileInputRef = useRef(null);
   const replaceSideRef = useRef('front');
 
@@ -200,6 +206,41 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
       `${(liveCard.person_name || liveCard.company || 'contact').replace(/\s+/g, '_')}.vcf`,
       buildVCard(liveCard)
     );
+  };
+
+  const handleRemove = async () => {
+    setRemoving(true);
+    try {
+      await apiClient.deleteCard(liveCard.id, token);
+      await loadUserVault(token);
+      setConfirmRemove(false);
+      onDeleted ? onDeleted(liveCard) : onBack();
+    } catch (e) {
+      setConfirmRemove(false);
+      setSnackbar({ visible: true, message: e?.message || 'Could not remove this card.', type: 'error' });
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}/share/${liveCard.id}`;
+    const title = liveCard.person_name || liveCard.company || 'Business card';
+    const text = `${title}${liveCard.company ? ' — ' + liveCard.company : ''} on CardFlow`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url: shareUrl });
+      } catch (e) {
+        // user cancelled the share sheet — nothing to do
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setSnackbar({ visible: true, message: 'Share link copied to clipboard.', type: 'success' });
+    } catch (e) {
+      setSnackbar({ visible: true, message: shareUrl, type: 'success' });
+    }
   };
 
   return (
@@ -401,19 +442,13 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
                   <Text style={styles.actionLabel}>Maps</Text>
                 </TouchableOpacity>
               ) : null}
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() => {
-                  const text = `${liveCard.person_name || liveCard.personName || ''}\n${liveCard.company || ''}\n${phone}\n${email}`;
-                  if (navigator.share) navigator.share({ title: liveCard.company, text });
-                  else {
-                    navigator.clipboard.writeText(text);
-                    alert('Contact details copied.');
-                  }
-                }}
-              >
+              <TouchableOpacity style={styles.actionBtn} onPress={handleShare}>
                 <Share2 size={18} color={colors.primary} />
                 <Text style={styles.actionLabel}>Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => setConfirmRemove(true)}>
+                <Trash2 size={18} color={colors.danger} />
+                <Text style={[styles.actionLabel, { color: colors.danger }]}>Remove</Text>
               </TouchableOpacity>
             </View>
 
@@ -445,6 +480,22 @@ export function SavedCardDetailScreen({ card, onBack, onHome, onUpdated }) {
           </>
         ) : null}
       </ScrollView>
+
+      <ConfirmDialog
+        visible={confirmRemove}
+        title="Remove this card?"
+        message={`"${liveCard.person_name || liveCard.company || 'This contact'}" will be removed from My Cards. This can't be undone.`}
+        confirmLabel={removing ? 'Removing…' : 'Remove'}
+        cancelLabel="Cancel"
+        onCancel={() => setConfirmRemove(false)}
+        onConfirm={handleRemove}
+      />
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar((s) => ({ ...s, visible: false }))}
+      />
     </View>
   );
 }
