@@ -12,16 +12,6 @@ function getTimeGreeting() {
   return 'Good Evening';
 }
 
-function countRecentCards(cards) {
-  if (!cards?.length) return 0;
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  return cards.filter((c) => {
-    const ts = c.created_at || c.createdAt || c.savedAt;
-    if (!ts) return false;
-    return new Date(ts).getTime() >= weekAgo;
-  }).length;
-}
-
 function cardPhone(card) {
   const phones = card.phones || [];
   const p = phones.find((x) => x.raw || x.e164) || phones[0];
@@ -36,15 +26,6 @@ function cardLocation(card) {
     return parts[0];
   }
   return '';
-}
-
-function StatBox({ value, label }) {
-  return (
-    <View style={styles.statBox}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
 }
 
 function DashboardHeader({ greeting, subline, onOpenProfile }) {
@@ -88,11 +69,10 @@ export function DashboardScreen({ onNavigate, onOpenProfile, onSelectCard }) {
   const firstName = (user?.name || 'User').split(' ')[0];
   const cardCount = savedCards?.length || 0;
   const bizCount = myBusinesses?.length || 0;
-  const newContacts = countRecentCards(savedCards);
   const hasCards = cardCount > 0;
   const hasBusinesses = bizCount > 0;
   const isFirstTime = !hasCards && !hasBusinesses;
-  const recentCards = hasCards ? savedCards.slice(0, 3) : [];
+  const recentCards = hasCards ? savedCards.slice(0, 2) : [];
 
   const goScan = () => onNavigate?.('user_scan');
   const goBrowse = () => onNavigate?.('user_search');
@@ -134,12 +114,6 @@ export function DashboardScreen({ onNavigate, onOpenProfile, onSelectCard }) {
         onOpenProfile={openProfile}
       />
 
-      <View style={styles.statsRow}>
-        <StatBox value={cardCount} label="Saved Cards" />
-        <StatBox value={bizCount} label="Businesses" />
-        <StatBox value={newContacts} label="New Contacts" />
-      </View>
-
       <ScanButton onPress={goScan} />
 
       {hasCards ? (
@@ -156,7 +130,6 @@ export function DashboardScreen({ onNavigate, onOpenProfile, onSelectCard }) {
             const company = card.company || '';
             const phone = cardPhone(card);
             const location = cardLocation(card);
-            const gstin = card.gstin || '';
             const imagePath = card.original_card_image_url || card.originalCardImageUrl;
 
             return (
@@ -181,9 +154,6 @@ export function DashboardScreen({ onNavigate, onOpenProfile, onSelectCard }) {
                       <MapPin size={12} color={colors.textMuted} />
                       <Text style={styles.metaText} numberOfLines={1}>{location}</Text>
                     </View>
-                  ) : null}
-                  {gstin ? (
-                    <Text style={styles.gstText}>GST: {gstin}</Text>
                   ) : null}
                 </View>
               </TouchableOpacity>
@@ -306,36 +276,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontFamily: fonts.sans
   },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: colors.bgCard,
-    borderRadius: radii.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center'
-  },
-  statValue: {
-    fontFamily: fonts.serif,
-    fontSize: 28,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    lineHeight: 34
-  },
-  statLabel: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    marginTop: 2,
-    textAlign: 'center',
-    fontFamily: fonts.sans,
-    lineHeight: 13
-  },
   section: { marginTop: spacing.sm, marginBottom: spacing.lg },
   sectionHead: {
     flexDirection: 'row',
@@ -392,12 +332,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     flex: 1
-  },
-  gstText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.gold,
-    marginTop: 6
   },
   browseCard: {
     backgroundColor: colors.bgCard,

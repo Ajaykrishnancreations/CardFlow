@@ -72,10 +72,6 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId, onBack }) {
     loadDirectoryData();
   }, [loadDirectoryData]);
 
-  const handleCategorySelect = (catId) => {
-    setSelectedCat(catId);
-  };
-
   const filteredBusinesses = businesses.filter((biz) => {
     if (selectedCat !== 'all' && biz.categoryId !== selectedCat && biz.category?.toLowerCase() !== selectedCat.toLowerCase()) return false;
     if (gstOnly && biz.verification !== 'gst') return false;
@@ -150,31 +146,6 @@ export function SearchScreen({ onSelectBusiness, initialCategoryId, onBack }) {
           </View>
         </View>
       )}
-
-      {/* Category Filter Chips */}
-      <View style={styles.catChipsWrapper}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.catChipsScroll}>
-          <TouchableOpacity
-            style={[styles.catChip, selectedCat === 'all' && styles.catChipActive]}
-            onPress={() => handleCategorySelect('all')}
-          >
-            <Text style={[styles.catChipText, selectedCat === 'all' && styles.catChipTextActive]}>
-              All Categories
-            </Text>
-          </TouchableOpacity>
-          {liveCategories.map((c) => (
-            <TouchableOpacity
-              key={c.id || c.slug}
-              style={[styles.catChip, selectedCat === (c.id || c.slug) && styles.catChipActive]}
-              onPress={() => handleCategorySelect(c.id || c.slug)}
-            >
-              <Text style={[styles.catChipText, selectedCat === (c.id || c.slug) && styles.catChipTextActive]}>
-                {c.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
 
       {/* Search Results List or Animated Skeletons */}
       <ScrollView contentContainerStyle={styles.resultsScroll} showsVerticalScrollIndicator={false}>
@@ -431,34 +402,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textPrimary,
     fontWeight: '500'
-  },
-  catChipsWrapper: {
-    backgroundColor: colors.bgCard,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border
-  },
-  catChipsScroll: {
-    paddingHorizontal: spacing.lg
-  },
-  catChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radii.chip,
-    backgroundColor: 'transparent',
-    marginRight: spacing.xs
-  },
-  catChipActive: {
-    backgroundColor: colors.primaryMuted
-  },
-  catChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.textSecondary
-  },
-  catChipTextActive: {
-    color: colors.primary,
-    fontWeight: '700'
   },
   resultsScroll: {
     padding: spacing.lg,

@@ -95,30 +95,7 @@ func (s *AuthService) VerifyOTP(ctx context.Context, rawPhone, otpCode, deviceID
 		return nil, errors.New("OTP must be 6 digits")
 	}
 
-	isValid := false
-
-	s.otpMutex.RLock()
-	storedCode, exists := s.otpStore[phone]
-	s.otpMutex.RUnlock()
-	if exists && storedCode == code {
-		isValid = true
-		s.otpMutex.Lock()
-		delete(s.otpStore, phone)
-		s.otpMutex.Unlock()
-	}
-
-	if !isValid && s.redis != nil && s.redis.Client != nil {
-		otpKey := fmt.Sprintf("otp:%s", phone)
-		data, err := s.redis.Client.HGetAll(ctx, otpKey).Result()
-		if err == nil && len(data) > 0 {
-			if data["code"] == code || data["hash"] == s.hashOTP(code) {
-				isValid = true
-				s.redis.Client.Del(ctx, otpKey)
-			}
-		}
-	}
-
-	if !isValid {
+	if !s.validateOTP(ctx, phone, code) {
 		return nil, errors.New("invalid OTP code. Please enter the 6-digit code")
 	}
 
@@ -142,6 +119,35 @@ func (s *AuthService) VerifyOTP(ctx context.Context, rawPhone, otpCode, deviceID
 	}
 	tokenPair.IsNewUser = isNewUser
 	return tokenPair, nil
+}
+
+// validateOTP checks a one-time code for phone against the in-memory store
+// (and Redis, when configured), consuming it on success so it can't be reused.
+func (s *AuthService) validateOTP(ctx context.Context, phone, code string) bool {
+	isValid := false
+
+	s.otpMutex.RLock()
+	storedCode, exists := s.otpStore[phone]
+	s.otpMutex.RUnlock()
+	if exists && storedCode == code {
+		isValid = true
+		s.otpMutex.Lock()
+		delete(s.otpStore, phone)
+		s.otpMutex.Unlock()
+	}
+
+	if !isValid && s.redis != nil && s.redis.Client != nil {
+		otpKey := fmt.Sprintf("otp:%s", phone)
+		data, err := s.redis.Client.HGetAll(ctx, otpKey).Result()
+		if err == nil && len(data) > 0 {
+			if data["code"] == code || data["hash"] == s.hashOTP(code) {
+				isValid = true
+				s.redis.Client.Del(ctx, otpKey)
+			}
+		}
+	}
+
+	return isValid
 }
 
 func (s *AuthService) resolveUser(ctx context.Context, phone string) (*domain.User, bool, error) {

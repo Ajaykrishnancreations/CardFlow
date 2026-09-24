@@ -177,6 +177,7 @@ func main() {
 
 			r.Get("/users/me", authHandler.GetMe)
 			r.Patch("/users/me", authHandler.UpdateMe)
+			r.Patch("/users/me/phone", authHandler.ChangePhone)
 			r.Delete("/users/me", authHandler.DeleteMe)
 			r.Get("/users/me/export", authHandler.ExportMe)
 

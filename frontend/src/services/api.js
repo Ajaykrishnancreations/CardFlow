@@ -156,6 +156,21 @@ export const apiClient = {
     return data.data || data;
   },
 
+  // Updates the caller's own mobile number after OTP verification.
+  async changePhone(phone, otpCode, token = '') {
+    const formattedPhone = formatE164(phone);
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE_URL}/users/me/phone`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ phone: formattedPhone, otp_code: otpCode })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || 'Could not update mobile number');
+    return data.data || data;
+  },
+
   // Starts a real Razorpay payment for the given plan — returns the order
   // details needed to open Razorpay Checkout (see AuthContext.activateSubscription).
   async createBillingOrder(planId, token = '') {

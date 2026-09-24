@@ -4,33 +4,25 @@ import {
   User,
   ChevronRight,
   LogOut,
-  Building2,
-  CreditCard,
-  Download,
   Bell,
   Shield,
   FileText,
   Briefcase,
   Phone,
-  Mail,
-  MapPin,
   Save,
   Headphones,
-  Home,
   Palette,
-  Crown,
-  Cloud
+  Crown
 } from 'lucide-react';
-import { colors, spacing, radii } from '../../theme';
+import { colors, spacing, radii, typography } from '../../theme';
 import { Card } from '../../components/Card';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { ThemeSettings } from '../../components/ThemeSettings';
 import { NotificationSettings } from '../../components/NotificationSettings';
 import { SubscriptionScreen } from '../../components/SubscriptionScreen';
-import { ContactsBackupModal } from '../../components/ContactsBackupModal';
+import { ChangePhoneModal } from '../../components/ChangePhoneModal';
 import { useAuth } from '../../context/AuthContext';
-import { isNativePlatform } from '../../utils/contactsSync';
 
 function formatPhoneDisplay(phone) {
   if (!phone) return '';
@@ -41,26 +33,21 @@ function formatPhoneDisplay(phone) {
 }
 
 export function ProfileScreen({ onNavigate, onBack }) {
-  const { user, logout, myBusinesses, savedCards, updateProfile } = useAuth();
+  const { user, logout, myBusinesses, updateProfile } = useAuth();
   const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
-  const [city, setCity] = useState(user?.city || 'Coimbatore');
-  const [state, setState] = useState(user?.state || 'Tamil Nadu');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [showTheme, setShowTheme] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSubscription, setShowSubscription] = useState(false);
-  const [showContactsBackup, setShowContactsBackup] = useState(false);
+  const [showChangePhone, setShowChangePhone] = useState(false);
 
   useEffect(() => {
     setName(user?.name || '');
-    setEmail(user?.email || '');
-    setCity(user?.city || 'Coimbatore');
-    setState(user?.state || 'Tamil Nadu');
   }, [user]);
 
   const phoneDisplay = formatPhoneDisplay(user?.phone);
+  const nameChanged = name.trim() !== (user?.name || '').trim() && name.trim().length > 0;
 
   if (showTheme) {
     return <ThemeSettings onBack={() => setShowTheme(false)} />;
@@ -79,12 +66,7 @@ export function ProfileScreen({ onNavigate, onBack }) {
     }
     setSaving(true);
     try {
-      await updateProfile({
-        name: name.trim(),
-        email: email.trim() || null,
-        city: city.trim(),
-        state: state.trim()
-      });
+      await updateProfile({ name: name.trim() });
       setToast('Profile saved.');
       setTimeout(() => setToast(''), 3000);
     } catch (e) {
@@ -94,31 +76,40 @@ export function ProfileScreen({ onNavigate, onBack }) {
     }
   };
 
-  const menuSections = [
-    {
-      title: 'Quick Links',
-      items: [
-        { icon: Home, label: 'Home', sub: 'Dashboard', action: () => onNavigate?.('user_dashboard') },
-        { icon: Building2, label: 'My Businesses', sub: myBusinesses?.length ? `${myBusinesses.length} business${myBusinesses.length > 1 ? 'es' : ''}` : 'None yet', action: () => onNavigate?.('user_my_business') },
-        { icon: CreditCard, label: 'Saved Cards', sub: savedCards?.length ? `${savedCards.length} cards` : 'None yet', action: () => onNavigate?.('user_vault') },
-        { icon: Download, label: 'Export & Backup', action: () => onNavigate?.('user_vault') },
-        ...(isNativePlatform()
-          ? [{ icon: Cloud, label: 'Backup & Restore Phone Contacts', sub: 'Cloud backup', action: () => setShowContactsBackup(true) }]
-          : []),
-        { icon: Crown, label: 'Subscription', sub: 'Go Premium', action: () => setShowSubscription(true) },
-        { icon: Headphones, label: 'Support', action: () => onNavigate?.('user_support') }
-      ]
-    },
-    {
-      title: 'Settings',
-      items: [
-        { icon: Palette, label: 'Theme', sub: 'Colors & appearance', action: () => setShowTheme(true) },
-        { icon: Bell, label: 'Notifications', action: () => setShowNotifications(true) },
-        { icon: Shield, label: 'Privacy', action: () => alert('Privacy settings coming soon.') },
-        { icon: FileText, label: 'Terms & Conditions', action: () => alert('Terms & Conditions — CardFlow v1.0') }
-      ]
-    }
+  const primaryItems = [
+    { icon: Crown, label: 'Subscription', sub: 'Go Premium', action: () => setShowSubscription(true) },
+    { icon: Headphones, label: 'Support', action: () => onNavigate?.('user_support') }
   ];
+
+  const settingsItems = [
+    { icon: Palette, label: 'Theme', sub: 'Colors & appearance', action: () => setShowTheme(true) },
+    { icon: Bell, label: 'Notifications', action: () => setShowNotifications(true) },
+    { icon: Shield, label: 'Privacy', action: () => alert('Privacy settings coming soon.') },
+    { icon: FileText, label: 'Terms & Conditions', action: () => alert('Terms & Conditions — CardFlow v1.0') }
+  ];
+
+  const renderMenuCard = (items) => (
+    <Card style={styles.menuCard}>
+      {items.map((item, idx) => {
+        const Icon = item.icon;
+        return (
+          <TouchableOpacity
+            key={item.label}
+            style={[styles.menuItem, idx === items.length - 1 && { borderBottomWidth: 0 }]}
+            onPress={item.action}
+            activeOpacity={0.7}
+          >
+            <Icon size={18} color={colors.textSecondary} style={{ marginRight: spacing.md }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuText}>{item.label}</Text>
+              {item.sub ? <Text style={styles.menuSub}>{item.sub}</Text> : null}
+            </View>
+            <ChevronRight size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        );
+      })}
+    </Card>
+  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -154,51 +145,43 @@ export function ProfileScreen({ onNavigate, onBack }) {
       <Text style={styles.sectionTitle}>Account Details</Text>
       <Card style={styles.formCard}>
         <Input label="FULL NAME" value={name} onChangeText={setName} leftIcon={User} placeholder="Your name" />
+
+        <View style={styles.labelRow}>
+          <Text style={styles.fieldLabel}>MOBILE NUMBER</Text>
+          <TouchableOpacity onPress={() => setShowChangePhone(true)} accessibilityLabel="Change mobile number">
+            <Text style={styles.changeLink}>Change Number</Text>
+          </TouchableOpacity>
+        </View>
         <Input
-          label="MOBILE NUMBER"
           value={phoneDisplay ? `+91 ${phoneDisplay}` : ''}
           editable={false}
           leftIcon={Phone}
         />
-        <Text style={styles.hint}>To change mobile number, logout and sign in with the new number.</Text>
-        <Input label="EMAIL" value={email} onChangeText={setEmail} leftIcon={Mail} placeholder="you@email.com" keyboardType="email-address" />
-        <Input label="CITY" value={city} onChangeText={setCity} leftIcon={MapPin} placeholder="Coimbatore" />
-        <Input label="STATE" value={state} onChangeText={setState} placeholder="Tamil Nadu" />
-        <Button title="Save Changes" onPress={handleSave} loading={saving} icon={Save} size="lg" style={{ marginTop: spacing.sm }} />
+
+        {nameChanged ? (
+          <Button title="Save Changes" onPress={handleSave} loading={saving} icon={Save} size="lg" style={{ marginTop: spacing.sm }} />
+        ) : null}
       </Card>
 
-      {menuSections.map((section) => (
-        <View key={section.title} style={styles.section}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-          <Card style={styles.menuCard}>
-            {section.items.map((item, idx) => {
-              const Icon = item.icon;
-              return (
-                <TouchableOpacity
-                  key={item.label}
-                  style={[styles.menuItem, idx === section.items.length - 1 && { borderBottomWidth: 0 }]}
-                  onPress={item.action}
-                  activeOpacity={0.7}
-                >
-                  <Icon size={18} color={colors.textSecondary} style={{ marginRight: spacing.md }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.menuText}>{item.label}</Text>
-                    {item.sub ? <Text style={styles.menuSub}>{item.sub}</Text> : null}
-                  </View>
-                  <ChevronRight size={18} color={colors.textMuted} />
-                </TouchableOpacity>
-              );
-            })}
-          </Card>
-        </View>
-      ))}
+      <View style={styles.section}>
+        {renderMenuCard(primaryItems)}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Settings</Text>
+        {renderMenuCard(settingsItems)}
+      </View>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.7}>
         <LogOut size={18} color={colors.danger} style={{ marginRight: spacing.sm }} />
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
 
-      <ContactsBackupModal visible={showContactsBackup} onClose={() => setShowContactsBackup(false)} />
+      <ChangePhoneModal
+        visible={showChangePhone}
+        currentPhone={user?.phone}
+        onClose={() => setShowChangePhone(false)}
+      />
     </ScrollView>
   );
 }
@@ -244,7 +227,9 @@ const styles = StyleSheet.create({
   },
   bizBadgeText: { fontSize: 11, color: colors.primary, fontWeight: '600', marginLeft: 4 },
   formCard: { padding: spacing.md, marginBottom: spacing.md },
-  hint: { fontSize: 11, color: colors.textMuted, marginTop: -4, marginBottom: spacing.sm, lineHeight: 16 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
+  fieldLabel: { ...typography.caption, color: colors.textPrimary, fontWeight: '600' },
+  changeLink: { fontSize: 12, fontWeight: '700', color: colors.primary },
   section: { marginBottom: spacing.md },
   sectionTitle: {
     fontSize: 11,

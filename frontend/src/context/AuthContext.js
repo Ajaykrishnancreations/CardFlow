@@ -359,6 +359,18 @@ export function AuthProvider({ children }) {
     return merged;
   }, [user, token]);
 
+  // Updates the logged-in user's own mobile number after OTP verification —
+  // distinct from sendOtp/verifyOtp (login), this never changes the session.
+  const changePhone = useCallback(async (newPhone, otpCode) => {
+    const updated = await apiClient.changePhone(newPhone, otpCode, token);
+    const merged = { ...user, phone: updated?.phone ?? user?.phone };
+    setUser(merged);
+    try {
+      localStorage.setItem('cf_user', JSON.stringify(merged));
+    } catch (e) {}
+    return merged;
+  }, [user, token]);
+
   // Opens Razorpay Checkout for the chosen plan and resolves once the
   // payment is verified server-side and the subscription is activated.
   // Rejects if the payment fails or the user closes the checkout modal.
@@ -642,6 +654,7 @@ export function AuthProvider({ children }) {
         verifyOtp,
         completeOnboarding,
         updateProfile,
+        changePhone,
         isPremiumActive,
         activateSubscription,
         cancelSubscription,

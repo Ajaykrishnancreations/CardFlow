@@ -134,6 +134,33 @@ func (h *AuthHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, updated)
 }
 
+type ChangePhoneRequest struct {
+	Phone   string `json:"phone"`
+	OTPCode string `json:"otp_code"`
+}
+
+func (h *AuthHandler) ChangePhone(w http.ResponseWriter, r *http.Request) {
+	user, ok := r.Context().Value("user").(*domain.User)
+	if !ok || user == nil {
+		response.Unauthorized(w, "authentication required")
+		return
+	}
+
+	var req ChangePhoneRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.BadRequest(w, "invalid request body", err.Error())
+		return
+	}
+
+	updated, err := h.authSvc.ChangePhone(r.Context(), user, req.Phone, req.OTPCode)
+	if err != nil {
+		response.BadRequest(w, err.Error(), nil)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, updated)
+}
+
 func (h *AuthHandler) DeleteMe(w http.ResponseWriter, r *http.Request) {
 	response.Message(w, http.StatusOK, "Account deletion initiated. All data will be purged following the 30-day DPDP grace period.")
 }
